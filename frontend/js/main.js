@@ -27,6 +27,7 @@
     modePanel: document.getElementById("mode-panel"),
     modeHint: document.getElementById("mode-hint"),
     recogniseButton: document.getElementById("recognise-button"),
+    resultArea: document.getElementById("result-area"),
     statusMessage: document.getElementById("status-message"),
     backButton: document.getElementById("back-button"),
     brandButton: document.getElementById("brand-button")
@@ -37,7 +38,11 @@
     loaded: false,
     loadError: false,
     currentModelId: null,
-    activeModeId: null
+    activeModeId: null,
+    hostToken: 0,
+    submission: null,
+    recognitionToken: 0,
+    recognitionBusy: false
   };
 
   function make(tagName, className, text) {
@@ -63,8 +68,25 @@
     );
   }
 
-  function setStatus(message) {
+  function setStatus(message, tone) {
     dom.statusMessage.textContent = message;
+    dom.statusMessage.dataset.tone = tone || "info";
+  }
+
+  function clearResult() {
+    clearElement(dom.resultArea);
+    dom.resultArea.hidden = true;
+    delete dom.resultArea.dataset.tone;
+  }
+
+  function showPrediction(digit) {
+    clearElement(dom.resultArea);
+    dom.resultArea.append(
+      make("p", "result-label", "Predicted digit"),
+      make("p", "result-digit", String(digit))
+    );
+    dom.resultArea.dataset.tone = "success";
+    dom.resultArea.hidden = false;
   }
 
   function renderWelcome() {
@@ -154,13 +176,140 @@
     });
   }
 
+  function createModeHost() {
+    state.hostToken += 1;
+    const hostId = state.hostToken;
+
+    function isCurrent() {
+      return hostId === state.hostToken;
+    }
+
+    return {
+      setStatus(message, tone) {
+        if (isCurrent()) {
+          setStatus(message, tone);
+        }
+      },
+      setReady(ready, reason) {
+        if (!isCurrent()) {
+          return;
+        }
+        dom.recogniseButton.title = ready ? "" : reason || "";
+        dom.recogniseButton.disabled = !ready || state.recognitionBusy;
+      },
+      provideSubmission(handlers) {
+        if (isCurrent()) {
+          state.submission = handlers;
+        }
+      },
+      inputChanged() {
+        if (!isCurrent()) {
+          return;
+        }
+        state.recognitionToken += 1;
+        state.recognitionBusy = false;
+        dom.recogniseButton.textContent = "Recognise";
+        dom.recogniseButton.disabled = true;
+        clearResult();
+        setStatus("");
+      }
+    };
+  }
+
+  function applyResult(result) {
+    if (!result || typeof result !== "object") {
+      clearResult();
+      setStatus(
+        "The application returned an unexpected response. Try again.",
+        "error"
+      );
+      return;
+    }
+
+    if (result.status === "ok" && Number.isInteger(result.prediction)) {
+      showPrediction(result.prediction);
+      setStatus(
+        result.message || "Recognised digit: " + result.prediction + ".",
+        "success"
+      );
+      return;
+    }
+
+    clearResult();
+    if (result.status === "uncertain" || result.status === "invalid_input") {
+      setStatus(
+        result.message || "The image could not be recognised.",
+        "warning"
+      );
+    } else {
+      setStatus(
+        result.message || "The model could not be run. Try again.",
+        "error"
+      );
+    }
+  }
+
+  async function recogniseCurrentInput() {
+    if (state.recognitionBusy) {
+      return;
+    }
+
+    const submission = state.submission;
+    if (
+      !submission ||
+      typeof submission.isReady !== "function" ||
+      typeof submission.submit !== "function" ||
+      !submission.isReady()
+    ) {
+      return;
+    }
+
+    const token = ++state.recognitionToken;
+    state.recognitionBusy = true;
+    dom.recogniseButton.disabled = true;
+    dom.recogniseButton.textContent = "Recognising…";
+    clearResult();
+    setStatus("Recognising the digit…", "info");
+
+    try {
+      const result = await submission.submit();
+      if (token !== state.recognitionToken) {
+        return;
+      }
+      applyResult(result);
+    } catch (error) {
+      if (token !== state.recognitionToken) {
+        return;
+      }
+      console.error("Recognition request failed:", error);
+      clearResult();
+      setStatus("Recognition could not be completed. Try again.", "error");
+    } finally {
+      if (token === state.recognitionToken) {
+        state.recognitionBusy = false;
+        dom.recogniseButton.textContent = "Recognise";
+        dom.recogniseButton.disabled = !(
+          state.submission &&
+          typeof state.submission.isReady === "function" &&
+          state.submission.isReady()
+        );
+      }
+    }
+  }
+
   function renderModePanel() {
     clearElement(dom.modePanel);
+    clearResult();
     dom.modeHint.textContent = "";
+    state.hostToken += 1;
+    state.submission = null;
+    state.recognitionToken += 1;
+    state.recognitionBusy = false;
     dom.recogniseButton.disabled = true;
-    dom.recogniseButton.title =
-      "Not available yet. Recognition is added in a later milestone.";
+    dom.recogniseButton.textContent = "Recognise";
+    dom.recogniseButton.title = "";
     dom.modePanel.tabIndex = 0;
+    setStatus("");
 
     const model = currentModel();
     if (!model) {
@@ -174,6 +323,7 @@
       dom.modePanel.append(
         make("p", "mode-note", "This model has no input modes yet.")
       );
+      setStatus("This model has no input modes yet.", "warning");
       return;
     }
 
@@ -182,10 +332,11 @@
       dom.modePanel.append(
         make("p", "mode-note", "This model does not have an interface yet.")
       );
+      setStatus("This model does not have an interface yet.", "error");
       return;
     }
 
-    view.renderMode(mode, dom.modePanel, model);
+    view.renderMode(mode, dom.modePanel, model, createModeHost());
     dom.modePanel.setAttribute("aria-labelledby", "mode-tab-" + mode.id);
     dom.modeHint.textContent = mode.hint;
   }
@@ -203,9 +354,6 @@
     state.activeModeId = mode.id;
     syncModeTabs();
     renderModePanel();
-    setStatus(
-      mode.label + " selected. Recognition is not connected yet."
-    );
   }
 
   function renderModelView() {
@@ -220,10 +368,6 @@
 
     renderModeTabs();
     renderModePanel();
-    setStatus(
-      "Recognition is not connected in this milestone. No prediction or " +
-        "confidence is shown."
-    );
   }
 
   function openModel(modelId) {
@@ -247,6 +391,15 @@
   function showWelcome() {
     state.currentModelId = null;
     state.activeModeId = null;
+    state.hostToken += 1;
+    state.submission = null;
+    state.recognitionToken += 1;
+    state.recognitionBusy = false;
+    dom.recogniseButton.textContent = "Recognise";
+    dom.recogniseButton.disabled = true;
+    dom.recogniseButton.title = "";
+    clearResult();
+    setStatus("");
     dom.modelView.hidden = true;
     dom.welcomeView.hidden = false;
     closeSettingsMenu();
@@ -268,6 +421,7 @@
   function bindEvents() {
     dom.brandButton.addEventListener("click", showWelcome);
     dom.backButton.addEventListener("click", showWelcome);
+    dom.recogniseButton.addEventListener("click", recogniseCurrentInput);
 
     dom.settingsButton.addEventListener("click", () => {
       const willOpen = dom.settingsMenu.hidden;

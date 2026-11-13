@@ -93,10 +93,13 @@ The animals example illustrates naming only; it is not an additional first-relea
 ### 4.4 Image Upload
 
 - Let the user select a local image and preview it.
+- After a valid selection, show the original image inside the upload area in place of the placeholder text. Use a responsive square preview of approximately 320 × 320 CSS pixels that scales images both up and down to fit without stretching or cropping. Apply pixelated rendering to low-resolution sources so enlarged digit pixels stay clear. Keep **Choose image** enabled below the preview, and keep the recognition action and result/status area below the upload controls.
+- A new valid selection replaces the preview and clears the previous prediction or error. An outstanding result for the replaced image must not update the new result area. Cancelling the file picker preserves the current image and result.
+- The preview shows the uploaded original, not the processed 28 × 28 model input. Do not add a separate processed-input preview panel.
 - Convert it to the model's 28 × 28 input format.
-- Provisional interaction: run inference when the user clicks the recognition button. Automatic recognition remains undecided.
+- Inference runs when the user clicks the explicit recognition button; automatic recognition remains undecided.
 - Support a single digit in the first release. Page detection, multiple-digit segmentation, and general OCR are outside this scope.
-- Supported formats, size limits, and cropping behaviour remain undecided.
+- PNG and JPEG uploads are supported up to 20 MB. Digit-region extraction and framing are confirmed in section 6.2.
 
 ### 4.5 Mouse Drawing
 
@@ -171,7 +174,7 @@ The two paths must ultimately produce the same kind of input: a 28 × 28 graysca
 - Python preprocessing selects inversion from this metadata only. It must not infer inversion from the current application theme, the system appearance, or a theme preference that may have changed since the drawing was made.
 - If a theme switch recolours an existing drawing, the frontend converts the background and strokes together, preserves the drawing's geometry, and updates `canvas_polarity` to match the converted pixels. The drawing's meaning and final normalized model input remain unchanged.
 - A missing or invalid `canvas_polarity` on drawing input is invalid input. It must not be guessed from the current theme.
-- Uploaded images are a separate input path. They do not carry `canvas_polarity`, and their polarity must not be inferred from the application theme. Uploaded-image polarity handling remains an open decision.
+- Uploaded-image polarity is estimated from the submitted pixels, using the median brightness of the outer border. A bright border means the image is inverted; a dark border leaves it unchanged. This detection never consults the application theme or `canvas_polarity`.
 
 ### 6.2 Shared Final Input
 
@@ -192,7 +195,7 @@ Processing sequence:
 1. Decode the image and composite transparent regions onto an explicit background. A drawing is submitted with an opaque canvas background.
 2. Convert to grayscale.
 3. For drawing input, establish the required dark-background, bright-stroke polarity from `canvas_polarity`: invert `dark_on_light`; leave `light_on_dark` unchanged. Do not use the current theme to select this branch. Uploaded images use their separate policy and never use `canvas_polarity`.
-4. Produce a 28 × 28 image. Digit-region extraction, aspect-ratio preservation, centring, and padding remain design decisions.
+4. Produce a 28 × 28 image: crop to the digit's ink bounding box, preserve the aspect ratio, scale the longest side to 20 pixels, and place the result on a 28 × 28 black canvas with its centre of mass at the canvas centre. Subpixel placement avoids geometry shifts that change predictions for narrow digits.
 5. Convert Pillow's 0–255 grayscale values to `float32` and divide by 255 once. Data already in `[0, 1]` must not be scaled again.
 6. Pass the resulting 28 × 28 array to the existing inference function, which performs flattening.
 
@@ -303,13 +306,15 @@ Future models add resources under `models/<model-directory>/`, an adapter under 
 
 ### 7.4 Frontend–Backend Result Contract
 
-Proposed shared result statuses are `ok`, `uncertain`, `invalid_input`, and `error`.
+Shared result statuses are `ok`, `uncertain`, `invalid_input`, and `error`.
 
-Digit results may contain `prediction`, `confidence`, and a user-facing message. For low-confidence results, the user-facing payload uses `prediction: null`.
+Digit results contain `prediction`, `confidence`, and a user-facing message. For low-confidence results, the user-facing payload uses `prediction: null`.
 
 The original inference function continues returning `(prediction, confidence)`; the adapter converts it to the application result format.
 
-Future models can return model-specific data within the shared status envelope. Exact API names, image-transfer format, and payload schemas remain implementation details to settle during the relevant milestone.
+The digit model's exposed API call is `recognise_upload(model_id, image_data_url)`. The model ID must match a registered model, the request must use upload input, and unexpected internal failures return the generic `error` envelope without exposing implementation details.
+
+Future models can return model-specific data within the shared status envelope. Image-transfer format and payload schemas beyond the digit model remain implementation details to settle for those models.
 
 ## 8. Implementation Milestones and Acceptance Criteria
 
@@ -357,13 +362,10 @@ Targeted automated checks cover confidence values `0.8999`, `0.90`, and `0.9001`
 
 | Topic | Current proposal or unresolved question |
 | --- | --- |
-| Image geometry | Simple resizing versus digit extraction, aspect-ratio preservation, centring, and padding |
-| Uploaded-image polarity | Whether to detect background polarity automatically and invert when needed |
 | Confidence display | Threshold confirmed; percentage visibility remains undecided |
-| Recognition trigger | Explicit button proposed; automatic recognition undecided |
+| Recognition trigger | Explicit button confirmed; automatic recognition undecided |
 | Interface language | Undecided; the English language of this plan does not determine the UI language |
 | Theme settings | Preference persistence and settings-entry placement |
 | Target platforms | Windows first versus additional desktop systems |
-| Image formats and limits | PNG/JPEG proposed; supported formats and size limits remain undecided |
 
 Agent workflow, approval/reporting conventions, and Git-operation rules are intentionally left for the separate `AGENT.md` document.

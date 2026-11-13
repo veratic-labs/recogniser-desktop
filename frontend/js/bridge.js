@@ -38,5 +38,14 @@
     return models;
   }
 
-  window.recogniser.bridge = { getModels };
+  async function recogniseUpload(modelId, imageDataUrl) {
+    const api = await waitForApi(10000);
+    const result = await api.recognise_upload(modelId, imageDataUrl);
+    if (!result || typeof result !== "object") {
+      throw new Error("The backend returned an unexpected recognition result.");
+    }
+    return result;
+  }
+
+  window.recogniser.bridge = { getModels, recogniseUpload };
 })();

@@ -1,8 +1,8 @@
 /* Interface for recogniser 0 (numbers).
 
-   This milestone provides the input-mode navigation only. Upload, drawing,
-   preprocessing, and recognition belong to later milestones, so every control
-   that would run the model is explicitly disabled. */
+   Milestone 2 enables local image selection, preprocessing, and recognition.
+   Freehand drawing remains a preview of the future canvas and is added in
+   Milestone 3. */
 
 (function () {
   "use strict";
@@ -10,8 +10,15 @@
   window.recogniser = window.recogniser || {};
   window.recogniser.views = window.recogniser.views || {};
 
-  const INACTIVE_CONTROL_TITLE =
-    "Not available yet. Recognition is added in a later milestone.";
+  const DRAWING_TITLE = "Drawing input is added in the next milestone.";
+  const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+  const MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES / (1024 * 1024);
+  const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg"]);
+  const ACCEPTED_EXTENSIONS = new Set(["png", "jpg", "jpeg"]);
+  /* Uploaded digits are often tiny, such as the 28 x 28 model input. Preview
+     images at or below this size use nearest-neighbour scaling so their
+     pixels stay sharp when enlarged. */
+  const LOW_RESOLUTION_PREVIEW_MAX = 64;
 
   /* The canvas follows the resolved theme. Its bitmap is larger than its CSS
      display size so a future drawing stays crisp as the workspace grows.
@@ -87,7 +94,21 @@
     return note;
   }
 
-  function renderUpload(container, model) {
+  function isAcceptedFile(file) {
+    const type = (file.type || "").toLowerCase();
+    if (ACCEPTED_TYPES.has(type)) {
+      return true;
+    }
+    if (type) {
+      return false;
+    }
+    const name = (file.name || "").toLowerCase();
+    const dot = name.lastIndexOf(".");
+    const extension = dot === -1 ? "" : name.slice(dot + 1);
+    return ACCEPTED_EXTENSIONS.has(extension);
+  }
+
+  function renderUpload(container, model, host) {
     const area = document.createElement("div");
     area.className = "input-area";
 
@@ -98,27 +119,165 @@
     const description = document.createElement("p");
     description.className = "input-area-text";
     description.textContent =
-      "Choosing a local image and preparing its " +
+      "Choose a PNG or JPEG image containing one handwritten digit. The " +
+      "picture is prepared for the " +
       model.input_label +
-      " model input will be enabled when recognition is connected.";
+      " model input before recognition.";
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "button secondary";
-    button.textContent = "Choose image";
-    button.disabled = true;
-    button.title = INACTIVE_CONTROL_TITLE;
+    const chooseButton = document.createElement("button");
+    chooseButton.type = "button";
+    chooseButton.className = "button secondary";
+    chooseButton.textContent = "Choose image";
 
-    area.append(title, description, button);
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = "image/png,image/jpeg";
+    fileInput.className = "visually-hidden";
+    fileInput.tabIndex = -1;
+
+    const preview = document.createElement("figure");
+    preview.className = "upload-preview";
+    preview.hidden = true;
+
+    const previewFrame = document.createElement("div");
+    previewFrame.className = "upload-preview-frame";
+
+    const previewImage = document.createElement("img");
+    previewImage.className = "upload-preview-image";
+    previewImage.alt = "Preview of the selected image.";
+
+    const previewCaption = document.createElement("figcaption");
+    previewCaption.className = "upload-preview-name";
+
+    previewFrame.append(previewImage);
+    preview.append(previewFrame, previewCaption);
+    /* The preview replaces the heading and helper text. The choose button
+       stays below it so another image can be selected at any time. */
+    area.append(title, description, preview, chooseButton, fileInput);
     container.append(area);
-    container.append(
-      createNote(
-        "Not implemented in this milestone. No image is selected or processed."
-      )
-    );
+
+    let selection = null;
+    let selectionToken = 0;
+
+    function updatePreviewRendering() {
+      const longestSide = Math.max(
+        previewImage.naturalWidth,
+        previewImage.naturalHeight
+      );
+      const lowResolution =
+        longestSide > 0 && longestSide <= LOW_RESOLUTION_PREVIEW_MAX;
+      previewImage.classList.toggle(
+        "upload-preview-image-pixelated",
+        lowResolution
+      );
+    }
+
+    previewImage.addEventListener("load", updatePreviewRendering);
+
+    function showPlaceholder() {
+      title.hidden = false;
+      description.hidden = false;
+      previewImage.removeAttribute("src");
+      previewImage.alt = "Preview of the selected image.";
+      previewImage.classList.remove("upload-preview-image-pixelated");
+      previewCaption.textContent = "";
+      preview.hidden = true;
+    }
+
+    function clearSelection() {
+      selection = null;
+      selectionToken += 1;
+      fileInput.value = "";
+      showPlaceholder();
+      host.setReady(false, "Choose an image to recognise.");
+    }
+
+    chooseButton.addEventListener("click", () => fileInput.click());
+
+    host.provideSubmission({
+      isReady: () => selection !== null,
+      submit: () =>
+        window.recogniser.bridge.recogniseUpload(model.id, selection.dataUrl)
+    });
+    host.setReady(false, "Choose an image to recognise.");
+    host.setStatus("Choose a local image, then run the model.", "info");
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = "";
+      if (!file) {
+        return;
+      }
+
+      host.inputChanged();
+      host.setReady(false, "Reading the selected image…");
+      selection = null;
+      const token = ++selectionToken;
+
+      if (!isAcceptedFile(file)) {
+        clearSelection();
+        host.setStatus("Choose a PNG or JPEG image.", "error");
+        return;
+      }
+
+      if (file.size > MAX_UPLOAD_BYTES) {
+        clearSelection();
+        host.setStatus(
+          "That image is larger than " +
+            MAX_UPLOAD_MEGABYTES +
+            " MB. Choose a smaller image.",
+          "error"
+        );
+        return;
+      }
+
+      /* Keep the placeholder visible while the replacement is read. A
+         cancelled picker never reaches this handler and keeps the old image. */
+      showPlaceholder();
+      host.setStatus("Reading the selected image…", "info");
+
+      const reader = new FileReader();
+      reader.addEventListener("error", () => {
+        if (token !== selectionToken) {
+          return;
+        }
+        clearSelection();
+        host.setStatus(
+          "The selected image could not be read. Try another file.",
+          "error"
+        );
+      });
+      reader.addEventListener("load", () => {
+        if (token !== selectionToken) {
+          return;
+        }
+        if (
+          typeof reader.result !== "string" ||
+          !reader.result.startsWith("data:image/")
+        ) {
+          clearSelection();
+          host.setStatus(
+            "The selected image could not be read. Try another file.",
+            "error"
+          );
+          return;
+        }
+
+        selection = { dataUrl: reader.result };
+        title.hidden = true;
+        description.hidden = true;
+        previewImage.src = reader.result;
+        previewImage.alt = "Preview of " + file.name + ".";
+        previewCaption.textContent = file.name;
+        preview.hidden = false;
+        host.setReady(true);
+        host.setStatus("Image ready. Choose Recognise to run the model.", "info");
+      });
+      reader.readAsDataURL(file);
+    });
   }
 
-  function renderDrawing(container) {
+  function renderDrawing(container, model, host) {
     const frame = document.createElement("div");
     frame.className = "canvas-frame";
 
@@ -133,12 +292,14 @@
     container.append(frame);
     container.append(
       createNote(
-        "Drawing is not implemented in this milestone. The canvas follows " +
-          "the resolved appearance theme: white with black strokes in Light, " +
-          "black with white strokes in Dark. Freehand input and Clear arrive " +
-          "later."
+        "Drawing is not implemented yet. The canvas follows the resolved " +
+          "appearance theme, but freehand input and Clear arrive in the next " +
+          "milestone."
       )
     );
+
+    host.setReady(false, DRAWING_TITLE);
+    host.setStatus("Drawing input is added in the next milestone.", "info");
   }
 
   const renderers = {
@@ -146,12 +307,14 @@
     drawing: renderDrawing
   };
 
-  function renderMode(mode, container, model) {
+  function renderMode(mode, container, model, host) {
     const render = renderers[mode.id];
     if (render) {
-      render(container, model);
+      render(container, model, host);
       return;
     }
+    host.setReady(false, "This input mode is not available.");
+    host.setStatus("This input mode has no interface yet.", "warning");
     container.append(createNote("This input mode has no interface yet."));
   }
 

@@ -36,6 +36,7 @@ class ModelRegistration:
     input_modes: tuple[InputMode, ...]
     frontend_view: str
     adapter: str
+    resource_dir: str
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable representation for the frontend."""
@@ -86,6 +87,7 @@ NUMBERS_0 = ModelRegistration(
     ),
     frontend_view="numbers",
     adapter="backend.adapters.numbers",
+    resource_dir="models/0-numbers",
 )
 
 _MODELS: tuple[ModelRegistration, ...] = (NUMBERS_0,)

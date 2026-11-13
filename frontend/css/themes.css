@@ -19,6 +19,9 @@
   --color-focus: #4f7cff;
   --color-canvas-background: #ffffff;
   --color-canvas-stroke: #000000;
+  --color-status-success: #1f6f43;
+  --color-status-warning: #8a5a00;
+  --color-status-error: #b42318;
   --shadow-menu: 0 10px 30px rgba(20, 20, 18, 0.1);
 }
 
@@ -39,5 +42,8 @@
   --color-focus: #82a6ff;
   --color-canvas-background: #000000;
   --color-canvas-stroke: #ffffff;
+  --color-status-success: #7fd4a2;
+  --color-status-warning: #e0b25a;
+  --color-status-error: #f08c86;
   --shadow-menu: 0 10px 30px rgba(0, 0, 0, 0.45);
 }

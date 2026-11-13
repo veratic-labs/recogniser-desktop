@@ -395,22 +395,6 @@ p {
   line-height: 1.55;
 }
 
-.notice {
-  margin: 22px 0 24px;
-  padding: 11px 14px;
-  background: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  color: var(--color-text-muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.notice strong {
-  color: var(--color-text);
-  font-weight: 600;
-}
-
 .panel {
   padding: 20px;
   background: var(--color-surface);
@@ -493,6 +477,88 @@ p {
   line-height: 1.5;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.upload-preview {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 320px;
+  margin: 0;
+}
+
+.upload-preview-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.upload-preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.upload-preview-image-pixelated {
+  image-rendering: pixelated;
+}
+
+.upload-preview-name {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Result area: populated only when the model returns a digit. */
+
+.result {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.result[data-tone="success"] {
+  border-color: var(--color-status-success);
+}
+
+.result-label {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.result-digit {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+}
+
 /* The drawing surface follows the resolved theme and scales with the panel.
    Its display size is independent of the 28 x 28 model input. */
 .canvas-frame {
@@ -573,6 +639,18 @@ p {
   line-height: 1.5;
 }
 
+.status[data-tone="success"] {
+  color: var(--color-status-success);
+}
+
+.status[data-tone="warning"] {
+  color: var(--color-status-warning);
+}
+
+.status[data-tone="error"] {
+  color: var(--color-status-error);
+}
+
 /* Responsive */
 
 @media (max-width: 720px) {
@@ -598,6 +676,11 @@ p {
 
   .panel {
     padding: 16px;
+  }
+
+  .input-area {
+    min-height: 200px;
+    padding: 18px;
   }
 
   .panel-footer {
