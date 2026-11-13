@@ -1,0 +1,7 @@
+# Desktop shell
+pywebview>=6.2,<7
+
+# Model input and inference (used from Milestone 2 onward)
+numpy>=2.2,<3
+onnxruntime>=1.23,<2
+Pillow>=12.3,<13
