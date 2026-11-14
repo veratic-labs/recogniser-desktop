@@ -40,8 +40,8 @@ Each milestone report must include:
 
 - The milestone name and completed behaviour.
 - Files created or changed and their purpose.
-- Checks performed and their actual results, including any checks that could not run.
-- Known limitations, unresolved issues, and anything needed for manual acceptance.
+- Checks performed and their actual results, including any checks that could not run. Report code and functional checks only; never claim visual or screenshot verification.
+- Known limitations, unresolved issues, and the manual verification steps the user should follow, including how to launch the app.
 - A proposed commit subject.
 - A clear statement that no commit or push has been made and that the work is awaiting acceptance and commit approval.
 
@@ -67,3 +67,19 @@ If the repository is newly initialised, its first commit follows the same approv
 - Never fabricate test outcomes or recognition results. Report failures and limitations accurately.
 - If requirements conflict or a material product decision is missing, explain the issue and request clarification before making the dependent change.
 - Keep `PLAN.md` as the product plan and this file as the agent workflow policy. Do not weaken these rules to bypass a blocker.
+
+## 6. Verification and UI Review
+
+You do not have image-viewing capabilities. Verification must therefore rely on code and functional checks, and visual acceptance belongs to the user.
+
+- Do not capture screenshots, generate visual-review artifacts, or attempt screenshot-based UI inspection. This covers pywebview window captures, headless-browser screenshots, screen grabs, and any image file produced for the purpose of reviewing layout.
+- Do not claim to have visually inspected the interface. Do not describe appearance, spacing, alignment, or visual polish as if they had been observed.
+- Use appropriate code and functional checks instead, for example:
+  - Python syntax and import checks for the backend modules.
+  - Backend tests for preprocessing, adapters, and exposed API functions.
+  - Frontend syntax checks and DOM state assertions, including interaction checks where the available tooling supports them.
+  - Registry, model path, and configuration checks that require no rendering.
+- Leave visual appearance, spacing, alignment, and overall UI acceptance to the user. Every milestone report must include concise launch instructions (for example activating `venv` and running `python -m backend.main`) plus short manual verification steps stating what to try and what to expect, so the user can assess the interface.
+- After the user inspects the application, make the UI adjustments they ask for, re-run the relevant checks, and report again. Do not treat your own judgement of the rendered interface as acceptance.
+
+These rules apply to all future milestones and to any other change that affects the interface.
