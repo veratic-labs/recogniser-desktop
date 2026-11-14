@@ -3,7 +3,10 @@
 Uploaded images have their own polarity path. The background is estimated from
 the image border, so recognition never depends on the application theme.
 
-Final model input, as required by PLAN.md section 6.2:
+Drawing submissions instead carry explicit ``canvas_polarity`` metadata that
+describes the submitted pixels: ``dark_on_light`` drawings are inverted, while
+``light_on_dark`` drawings are used as submitted. Both paths then share the same
+digit framing and produce the final model input required by PLAN.md section 6.2:
 
 - 28 x 28, one grayscale channel
 - dark background with bright strokes
@@ -42,6 +45,33 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES // (1024 * 1024)
 SUPPORTED_FORMATS = frozenset({"PNG", "JPEG"})
 
+# Polarity values the drawing canvas may report alongside a submitted drawing.
+# The vocabulary describes the submitted pixels, not the current theme.
+CANVAS_POLARITIES = frozenset({"dark_on_light", "light_on_dark"})
+
+# A normalised drawing whose brightest pixel stays below this level is empty.
+DRAWING_MIN_INK = 8
+
+UPLOAD_READ_ERROR = (
+    "The selected image could not be read. Choose a PNG or JPEG image."
+)
+UPLOAD_NO_DIGIT_MESSAGE = (
+    "No digit was found in that image. Choose a picture with one clear "
+    "handwritten digit."
+)
+DRAWING_EMPTY_MESSAGE = "The canvas is empty. Draw a digit before recognising."
+DRAWING_NO_DIGIT_MESSAGE = (
+    "No digit could be found in the drawing. Clear the canvas and draw the "
+    "digit again."
+)
+DRAWING_UNREADABLE_MESSAGE = (
+    "The drawing could not be read. Clear the canvas and draw the digit again."
+)
+DRAWING_MISSING_POLARITY_MESSAGE = (
+    "The drawing did not include its canvas polarity. Clear the canvas and "
+    "draw the digit again."
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 Predictor = Callable[[np.ndarray], tuple[int, float]]
@@ -57,10 +87,16 @@ def _model_resource(filename: str) -> Path:
     return PROJECT_ROOT / model.resource_dir / filename
 
 
-def _decode_upload(data_url: str) -> bytes:
+def _decode_data_url(
+    data_url: str,
+    *,
+    missing_message: str,
+    unreadable_message: str,
+    empty_message: str,
+) -> bytes:
     """Decode a base64 image data URL, rejecting unusable payloads."""
     if not isinstance(data_url, str) or not data_url.strip():
-        raise InvalidInputError("No image was provided. Choose an image to recognise.")
+        raise InvalidInputError(missing_message)
 
     header, separator, payload = data_url.partition(",")
     if (
@@ -68,9 +104,7 @@ def _decode_upload(data_url: str) -> bytes:
         or "base64" not in header.lower()
         or "image/" not in header.lower()
     ):
-        raise InvalidInputError(
-            "The selected image could not be read. Choose a PNG or JPEG image."
-        )
+        raise InvalidInputError(unreadable_message)
 
     # Reject oversized payloads before allocating the decoded bytes.
     if len(payload) > (MAX_UPLOAD_BYTES * 4) // 3 + 4:
@@ -82,18 +116,36 @@ def _decode_upload(data_url: str) -> bytes:
     try:
         raw = base64.b64decode(payload, validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise InvalidInputError(
-            "The selected image could not be read. Choose a PNG or JPEG image."
-        ) from exc
+        raise InvalidInputError(unreadable_message) from exc
 
     if not raw:
-        raise InvalidInputError("The selected image is empty. Choose another image.")
+        raise InvalidInputError(empty_message)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise InvalidInputError(
             f"That image is larger than {MAX_UPLOAD_MEGABYTES} MB. "
             "Choose a smaller image."
         )
     return raw
+
+
+def _decode_upload(data_url: str) -> bytes:
+    """Decode an upload data URL with upload-specific messages."""
+    return _decode_data_url(
+        data_url,
+        missing_message="No image was provided. Choose an image to recognise.",
+        unreadable_message=UPLOAD_READ_ERROR,
+        empty_message="The selected image is empty. Choose another image.",
+    )
+
+
+def _decode_drawing(data_url: str) -> bytes:
+    """Decode a drawing data URL with drawing-specific messages."""
+    return _decode_data_url(
+        data_url,
+        missing_message="No drawing was provided. Draw a digit on the canvas first.",
+        unreadable_message=DRAWING_UNREADABLE_MESSAGE,
+        empty_message="The drawing is empty. Draw a digit on the canvas first.",
+    )
 
 
 def _flatten_alpha(image: Image.Image) -> Image.Image:
@@ -136,6 +188,14 @@ def _load_grayscale(raw: bytes) -> np.ndarray:
             "That image could not be read. It may be damaged or use an "
             "unsupported format."
         ) from exc
+
+
+def _load_drawing_grayscale(raw: bytes) -> np.ndarray:
+    """Decode a submitted drawing, reporting failures in drawing terms."""
+    try:
+        return _load_grayscale(raw)
+    except InvalidInputError as exc:
+        raise InvalidInputError(DRAWING_UNREADABLE_MESSAGE) from exc
 
 
 def _background_is_bright(gray: np.ndarray) -> bool:
@@ -189,22 +249,23 @@ def _otsu_threshold(gray: np.ndarray) -> int:
     return best_threshold
 
 
-def _digit_bounds(gray: np.ndarray) -> tuple[int, int, int, int]:
+def _digit_bounds(
+    gray: np.ndarray, message: str = UPLOAD_NO_DIGIT_MESSAGE
+) -> tuple[int, int, int, int]:
     """Return the bounding box of the digit's bright strokes."""
     threshold = _otsu_threshold(gray)
     mask = gray > threshold
     if not bool(mask.any()):
-        raise InvalidInputError(
-            "No digit was found in that image. Choose a picture with one clear "
-            "handwritten digit."
-        )
+        raise InvalidInputError(message)
 
     rows = np.flatnonzero(mask.any(axis=1))
     columns = np.flatnonzero(mask.any(axis=0))
     return int(rows[0]), int(rows[-1]), int(columns[0]), int(columns[-1])
 
 
-def _frame_digit(gray: np.ndarray) -> np.ndarray:
+def _frame_digit(
+    gray: np.ndarray, empty_message: str = UPLOAD_NO_DIGIT_MESSAGE
+) -> np.ndarray:
     """Crop the digit and centre it, aspect-preserved, on a 28 x 28 canvas.
 
     The digit is scaled so its longest side is 20 pixels, matching the MNIST
@@ -212,7 +273,7 @@ def _frame_digit(gray: np.ndarray) -> np.ndarray:
     sits at the canvas centre. Subpixel placement avoids a quantisation shift
     that otherwise changes predictions for narrow digits such as 9 and 7.
     """
-    top, bottom, left, right = _digit_bounds(gray)
+    top, bottom, left, right = _digit_bounds(gray, empty_message)
     crop = Image.fromarray(gray[top : bottom + 1, left : right + 1])
 
     width, height = crop.size
@@ -223,10 +284,7 @@ def _frame_digit(gray: np.ndarray) -> np.ndarray:
 
     total = float(values.sum())
     if total <= 0.0:
-        raise InvalidInputError(
-            "No digit was found in that image. Choose a picture with one clear "
-            "handwritten digit."
-        )
+        raise InvalidInputError(empty_message)
 
     resized_width, resized_height = resized_size
     rows = np.arange(resized_height, dtype=np.float64)
@@ -305,6 +363,46 @@ def prepare_upload(data_url: str) -> np.ndarray:
         gray = 255 - gray
 
     prepared = _frame_digit(gray)
+    _validate_prepared(prepared)
+    return prepared
+
+
+def _normalise_drawing(gray: np.ndarray, canvas_polarity: Any) -> np.ndarray:
+    """Return a drawing on the model's dark background with bright strokes.
+
+    Inversion is selected from the submitted drawing's own metadata only. The
+    theme preference and system appearance are never consulted, because either
+    may have changed since the drawing was made.
+    """
+    if not isinstance(canvas_polarity, str) or canvas_polarity not in CANVAS_POLARITIES:
+        raise InvalidInputError(DRAWING_MISSING_POLARITY_MESSAGE)
+
+    if canvas_polarity == "dark_on_light":
+        return 255 - gray
+    return gray
+
+
+def _drawing_has_ink(gray: np.ndarray) -> bool:
+    """Report whether a normalised drawing contains any visible stroke."""
+    return int(gray.max(initial=0)) >= DRAWING_MIN_INK
+
+
+def prepare_drawing(data_url: str, canvas_polarity: Any) -> np.ndarray:
+    """Decode a submitted drawing and prepare the digit model input.
+
+    ``canvas_polarity`` describes the submitted pixels, so a Light-theme
+    drawing (dark strokes on white) is inverted while a Dark-theme drawing
+    (bright strokes on black) is used as submitted. Both branches then share
+    the upload path's framing and scaling.
+    """
+    raw = _decode_drawing(data_url)
+    gray = _load_drawing_grayscale(raw)
+    gray = _normalise_drawing(gray, canvas_polarity)
+
+    if not _drawing_has_ink(gray):
+        raise InvalidInputError(DRAWING_EMPTY_MESSAGE)
+
+    prepared = _frame_digit(gray, DRAWING_NO_DIGIT_MESSAGE)
     _validate_prepared(prepared)
     return prepared
 
@@ -427,5 +525,12 @@ def build_result(prediction: int, confidence: float) -> dict[str, Any]:
 def recognise_upload(image_data_url: str) -> dict[str, Any]:
     """Recognise the digit in an uploaded image and return the shared result."""
     prepared = prepare_upload(image_data_url)
+    prediction, confidence = _run_inference(prepared)
+    return build_result(prediction, confidence)
+
+
+def recognise_drawing(image_data_url: str, canvas_polarity: Any) -> dict[str, Any]:
+    """Recognise the digit in a submitted drawing and return the shared result."""
+    prepared = prepare_drawing(image_data_url, canvas_polarity)
     prediction, confidence = _run_inference(prepared)
     return build_result(prediction, confidence)

@@ -1,9 +1,9 @@
 # recogniser
 
 A minimal desktop application for trying trained neural networks on your own
-input. This build covers **Milestones 1 and 2**: the desktop shell, welcome
+input. This build covers **Milestones 1 to 3**: the desktop shell, welcome
 screen, registry-driven model list, model interaction view, appearance settings,
-and image-upload recognition for the digit model.
+and image-upload and freehand-drawing recognition for the digit model.
 
 ## Requirements
 
@@ -48,13 +48,25 @@ python -m backend.main
   longest side is 20 pixels, and centred on a black canvas. Image polarity is
   detected from the border pixels, so recognition is independent of the
   application theme.
+- **Freehand drawing** shows a canvas that follows the resolved theme. Draw one
+  digit with the mouse (or a pointer), then click **Recognise**. **Clear**
+  empties the canvas, disables itself, and drops the previous result; the
+  button is disabled until the canvas contains ink. Starting a new stroke also
+  drops the previous result. Changing the appearance converts the drawing's
+  background and strokes together, so its geometry is preserved.
+- Submitted drawings are sent as a PNG together with `canvas_polarity`, which
+  describes the submitted pixels rather than the current theme. Light-theme
+  drawings (`dark_on_light`) are inverted and Dark-theme drawings
+  (`light_on_dark`) are used as drawn, so a prediction does not depend on the
+  theme at recognition time. The stroke is then converted to the model's
+  28 × 28 `float32` input by the same ink-crop, aspect-preserving 20-pixel
+  scaling, and centring used for uploads. A blank canvas is rejected before
+  inference.
 - A score of at least `0.90` shows the predicted digit. Lower scores show an
   "unable to predict with enough confidence" message without revealing the
-  candidate digit. Invalid files, oversized images, and model failures show
-  user-facing messages. The confidence percentage is not displayed.
-- **Freehand drawing** is still a placeholder introduced in Milestone 1. Its
-  canvas follows the resolved theme, but drawing input and **Recognise** for
-  that mode arrive in Milestone 3.
+  candidate digit. Invalid files, oversized images, empty drawings, and model
+  failures show user-facing messages. The confidence percentage is not
+  displayed.
 - The input mode and result/status area share one workspace. There is no
   separate processed-image preview.
 - Light mode is the default. The appearance menu offers Light, Dark, and

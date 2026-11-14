@@ -1,8 +1,4 @@
-/* Interface for recogniser 0 (numbers).
-
-   Milestone 2 enables local image selection, preprocessing, and recognition.
-   Freehand drawing remains a preview of the future canvas and is added in
-   Milestone 3. */
+/* Interface for recogniser 0 (numbers): image upload and freehand drawing. */
 
 (function () {
   "use strict";
@@ -10,7 +6,6 @@
   window.recogniser = window.recogniser || {};
   window.recogniser.views = window.recogniser.views || {};
 
-  const DRAWING_TITLE = "Drawing input is added in the next milestone.";
   const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
   const MAX_UPLOAD_MEGABYTES = MAX_UPLOAD_BYTES / (1024 * 1024);
   const ACCEPTED_TYPES = new Set(["image/png", "image/jpeg"]);
@@ -20,11 +15,13 @@
      pixels stay sharp when enlarged. */
   const LOW_RESOLUTION_PREVIEW_MAX = 64;
 
-  /* The canvas follows the resolved theme. Its bitmap is larger than its CSS
-     display size so a future drawing stays crisp as the workspace grows.
-     Neither value is tied to the 28 x 28 model input. */
+  /* The freehand canvas scales with the workspace, so its bitmap is larger
+     than its responsive CSS display box and independent of the 28 x 28 model
+     input. Pointer positions are converted from CSS to bitmap pixels. */
   const CANVAS_BITMAP_SIZE = 560;
+  const CANVAS_STROKE_WIDTH = Math.round(CANVAS_BITMAP_SIZE / 28);
 
+  /* Canvas polarity describes the submitted pixels, not the theme setting. */
   const CANVAS_POLARITY = {
     light: "dark_on_light",
     dark: "light_on_dark"
@@ -35,56 +32,268 @@
     light_on_dark: "a black background and white strokes"
   };
 
+  /* Palettes used only if a theme colour token cannot be read or parsed. */
+  const FALLBACK_PALETTES = {
+    dark_on_light: {
+      background: "#ffffff",
+      stroke: "#000000",
+      backgroundRgb: [255, 255, 255],
+      strokeRgb: [0, 0, 0]
+    },
+    light_on_dark: {
+      background: "#000000",
+      stroke: "#ffffff",
+      backgroundRgb: [0, 0, 0],
+      strokeRgb: [255, 255, 255]
+    }
+  };
+
+  /* Controllers are looked up by canvas so a theme change reaches the drawing
+     that is currently mounted without keeping removed views alive. */
+  const canvasControllers = new WeakMap();
+
+  function parseColour(value, fallback) {
+    const text = String(value || "").trim().toLowerCase();
+    const short = /^#([0-9a-f]{3})$/.exec(text);
+    if (short) {
+      return short[1].split("").map((digit) => parseInt(digit + digit, 16));
+    }
+    const full = /^#([0-9a-f]{6})$/.exec(text);
+    if (full) {
+      return [0, 2, 4].map((offset) =>
+        parseInt(full[1].slice(offset, offset + 2), 16)
+      );
+    }
+    const rgb = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/.exec(
+      text
+    );
+    if (rgb) {
+      return [rgb[1], rgb[2], rgb[3]].map((channel) =>
+        Math.min(255, parseInt(channel, 10))
+      );
+    }
+    return fallback.slice();
+  }
+
   function canvasPalette() {
     const rootStyle = window.getComputedStyle(document.documentElement);
     const settings = window.recogniser.settings;
     const resolved = settings ? settings.getState().resolved : "light";
     const polarity = CANVAS_POLARITY[resolved] || CANVAS_POLARITY.light;
+    const fallback = FALLBACK_PALETTES[polarity];
+
+    const background =
+      rootStyle.getPropertyValue("--color-canvas-background").trim() ||
+      fallback.background;
+    const stroke =
+      rootStyle.getPropertyValue("--color-canvas-stroke").trim() ||
+      fallback.stroke;
 
     return {
-      background:
-        rootStyle.getPropertyValue("--color-canvas-background").trim() ||
-        "#ffffff",
-      stroke:
-        rootStyle.getPropertyValue("--color-canvas-stroke").trim() || "#000000",
-      polarity
+      background,
+      stroke,
+      polarity,
+      backgroundRgb: parseColour(background, fallback.backgroundRgb),
+      strokeRgb: parseColour(stroke, fallback.strokeRgb)
     };
   }
 
-  function applyCanvasTheme(canvas) {
-    const palette = canvasPalette();
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
+  /* Remap every canvas pixel from one background/stroke pair to another. The
+     confirmed palettes are exact inverses, so a theme switch converts the
+     background and strokes together while leaving the drawing's geometry
+     untouched. */
+  function convertCanvasColours(canvas, context, from, to) {
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = image.data;
+    const spans = [0, 1, 2].map(
+      (channel) => from.strokeRgb[channel] - from.backgroundRgb[channel]
+    );
+
+    for (let index = 0; index < data.length; index += 4) {
+      for (let channel = 0; channel < 3; channel += 1) {
+        const span = spans[channel];
+        const next =
+          span === 0
+            ? to.backgroundRgb[channel]
+            : to.backgroundRgb[channel] +
+              ((data[index + channel] - from.backgroundRgb[channel]) / span) *
+                (to.strokeRgb[channel] - to.backgroundRgb[channel]);
+        data[index + channel] = Math.max(0, Math.min(255, Math.round(next)));
+      }
+      data[index + 3] = 255;
     }
 
-    /* This milestone has no drawn content. The drawing milestone must replace
-       this fill with an in-place background/stroke conversion so an existing
-       drawing keeps its geometry when the resolved theme changes. */
-    context.fillStyle = palette.background;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.strokeStyle = palette.stroke;
-
-    canvas.dataset.canvasPolarity = palette.polarity;
-    canvas.dataset.canvasBackground = palette.background;
-    canvas.dataset.canvasStroke = palette.stroke;
-    canvas.setAttribute(
-      "aria-label",
-      "Blank drawing canvas with " +
-        CANVAS_APPEARANCE[palette.polarity] +
-        ". Drawing input is not enabled yet."
-    );
-  }
-
-  function refreshCanvasThemes() {
-    document
-      .querySelectorAll(".drawing-canvas")
-      .forEach((canvas) => applyCanvasTheme(canvas));
+    context.putImageData(image, 0, 0);
   }
 
   const settings = window.recogniser.settings;
   if (settings) {
-    settings.onChange(refreshCanvasThemes);
+    settings.onChange(() => {
+      document.querySelectorAll(".drawing-canvas").forEach((canvas) => {
+        const controller = canvasControllers.get(canvas);
+        if (controller) {
+          controller.applyTheme();
+        }
+      });
+    });
+  }
+
+  function createCanvasController(canvas, handlers) {
+    const context = canvas.getContext("2d");
+    let palette = canvasPalette();
+    let hasInk = false;
+    let activePointer = null;
+    let lastPoint = null;
+
+    function updateMetadata() {
+      canvas.dataset.canvasPolarity = palette.polarity;
+      canvas.dataset.canvasBackground = palette.background;
+      canvas.dataset.canvasStroke = palette.stroke;
+      canvas.setAttribute(
+        "aria-label",
+        "Drawing canvas with " +
+          CANVAS_APPEARANCE[palette.polarity] +
+          ". Draw one digit, then choose Recognise."
+      );
+      context.strokeStyle = palette.stroke;
+      context.fillStyle = palette.stroke;
+      context.lineWidth = CANVAS_STROKE_WIDTH;
+      context.lineCap = "round";
+      context.lineJoin = "round";
+    }
+
+    function fillBackground(colour) {
+      context.save();
+      context.globalCompositeOperation = "source-over";
+      context.fillStyle = colour;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.restore();
+    }
+
+    function pointFromEvent(event) {
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) {
+        return null;
+      }
+      /* The bitmap is larger than the responsive display box, so pointer
+         positions must be converted rather than used as bitmap pixels. */
+      return {
+        x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+        y: ((event.clientY - rect.top) / rect.height) * canvas.height
+      };
+    }
+
+    function startStroke(event) {
+      if (activePointer !== null) {
+        return;
+      }
+      if (event.pointerType === "mouse" && event.button !== 0) {
+        return;
+      }
+      const point = pointFromEvent(event);
+      if (!point) {
+        return;
+      }
+
+      event.preventDefault();
+      activePointer = event.pointerId;
+      lastPoint = point;
+
+      /* A press without movement still marks a visible dot. */
+      context.fillStyle = palette.stroke;
+      context.beginPath();
+      context.arc(point.x, point.y, CANVAS_STROKE_WIDTH / 2, 0, Math.PI * 2);
+      context.fill();
+      context.beginPath();
+      context.moveTo(point.x, point.y);
+
+      try {
+        canvas.setPointerCapture(event.pointerId);
+      } catch (error) {
+        /* Synthetic pointers cannot be captured; drawing continues. */
+      }
+
+      if (!hasInk) {
+        hasInk = true;
+        handlers.onInkChange(true);
+      }
+      handlers.onStrokeStart();
+    }
+
+    function continueStroke(event) {
+      if (activePointer === null || event.pointerId !== activePointer) {
+        return;
+      }
+      const point = pointFromEvent(event);
+      if (!point) {
+        return;
+      }
+
+      event.preventDefault();
+      context.beginPath();
+      context.moveTo(lastPoint.x, lastPoint.y);
+      context.lineTo(point.x, point.y);
+      context.stroke();
+      lastPoint = point;
+    }
+
+    function endStroke(event) {
+      if (activePointer === null || event.pointerId !== activePointer) {
+        return;
+      }
+      activePointer = null;
+      lastPoint = null;
+      try {
+        canvas.releasePointerCapture(event.pointerId);
+      } catch (error) {
+        /* The pointer was never captured; nothing to release. */
+      }
+    }
+
+    canvas.addEventListener("pointerdown", startStroke);
+    canvas.addEventListener("pointermove", continueStroke);
+    canvas.addEventListener("pointerup", endStroke);
+    canvas.addEventListener("pointercancel", endStroke);
+    canvas.addEventListener("lostpointercapture", endStroke);
+
+    updateMetadata();
+    fillBackground(palette.background);
+
+    return {
+      hasInk() {
+        return hasInk;
+      },
+      clear() {
+        activePointer = null;
+        lastPoint = null;
+        fillBackground(palette.background);
+        if (hasInk) {
+          hasInk = false;
+          handlers.onInkChange(false);
+        }
+      },
+      applyTheme() {
+        const next = canvasPalette();
+        const paletteChanged =
+          next.background !== palette.background ||
+          next.stroke !== palette.stroke;
+        if (paletteChanged) {
+          if (hasInk) {
+            convertCanvasColours(canvas, context, palette, next);
+          } else {
+            fillBackground(next.background);
+          }
+        }
+        palette = next;
+        updateMetadata();
+      },
+      snapshot() {
+        return {
+          dataUrl: canvas.toDataURL("image/png"),
+          polarity: canvas.dataset.canvasPolarity || palette.polarity
+        };
+      }
+    };
   }
 
   function createNote(text) {
@@ -286,20 +495,68 @@
     canvas.width = CANVAS_BITMAP_SIZE;
     canvas.height = CANVAS_BITMAP_SIZE;
     canvas.setAttribute("role", "img");
-    applyCanvasTheme(canvas);
 
     frame.append(canvas);
-    container.append(frame);
+
+    const actions = document.createElement("div");
+    actions.className = "canvas-actions";
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "button secondary";
+    clearButton.textContent = "Clear";
+    clearButton.disabled = true;
+    actions.append(clearButton);
+
+    container.append(frame, actions);
     container.append(
       createNote(
-        "Drawing is not implemented yet. The canvas follows the resolved " +
-          "appearance theme, but freehand input and Clear arrive in the next " +
-          "milestone."
+        "Draw one digit in the canvas. Changing the appearance keeps the " +
+          "drawing and converts only its colours."
       )
     );
 
-    host.setReady(false, DRAWING_TITLE);
-    host.setStatus("Drawing input is added in the next milestone.", "info");
+    const controller = createCanvasController(canvas, {
+      onStrokeStart() {
+        host.inputChanged();
+        host.setReady(true);
+        host.setStatus(
+          "Drawing ready. Choose Recognise to run the model.",
+          "info"
+        );
+      },
+      onInkChange(hasInk) {
+        clearButton.disabled = !hasInk;
+      }
+    });
+    canvasControllers.set(canvas, controller);
+
+    clearButton.addEventListener("click", () => {
+      controller.clear();
+      host.inputChanged();
+      host.setReady(false, "Draw a digit to recognise.");
+      host.setStatus(
+        "Canvas cleared. Draw a digit, then choose Recognise.",
+        "info"
+      );
+    });
+
+    host.provideSubmission({
+      isReady: () => controller.hasInk(),
+      submit: () => {
+        /* Polarity is captured with the pixels, so a later theme change
+           cannot alter how this drawing is interpreted. */
+        const drawing = controller.snapshot();
+        return window.recogniser.bridge.recogniseDrawing(
+          model.id,
+          drawing.dataUrl,
+          drawing.polarity
+        );
+      }
+    });
+
+    host.setReady(false, "Draw a digit to recognise.");
+    host.setStatus("Draw one digit with the mouse, then run the model.", "info");
   }
 
   const renderers = {

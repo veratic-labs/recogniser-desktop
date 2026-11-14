@@ -578,6 +578,17 @@ p {
   background: var(--color-canvas-background);
   border-radius: 6px;
   box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
+  /* Freehand input must not scroll or select while a stroke is drawn. */
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.canvas-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .panel-footer {

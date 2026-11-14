@@ -47,5 +47,18 @@
     return result;
   }
 
-  window.recogniser.bridge = { getModels, recogniseUpload };
+  async function recogniseDrawing(modelId, imageDataUrl, canvasPolarity) {
+    const api = await waitForApi(10000);
+    const result = await api.recognise_drawing(
+      modelId,
+      imageDataUrl,
+      canvasPolarity
+    );
+    if (!result || typeof result !== "object") {
+      throw new Error("The backend returned an unexpected recognition result.");
+    }
+    return result;
+  }
+
+  window.recogniser.bridge = { getModels, recogniseUpload, recogniseDrawing };
 })();

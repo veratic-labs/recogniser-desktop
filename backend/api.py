@@ -57,3 +57,38 @@ class Api:
         except Exception:
             LOGGER.exception("Unexpected failure while recognising an uploaded image.")
             return _result("error", MODEL_ERROR_MESSAGE)
+
+    def recognise_drawing(
+        self,
+        model_id: str,
+        image_data_url: str,
+        canvas_polarity: str,
+    ) -> dict[str, Any]:
+        """Run a submitted drawing through the selected model's drawing adapter.
+
+        ``canvas_polarity`` describes the pixels in ``image_data_url``; the
+        adapter selects the required preprocessing branch from it and never
+        from the current theme.
+        """
+        model = find_model(model_id) if isinstance(model_id, str) else None
+        if model is None:
+            return _result("error", "That model is not available.")
+        if not any(mode.id == "drawing" for mode in model.input_modes):
+            return _result("error", "That model does not support drawing input.")
+
+        try:
+            adapter = importlib.import_module(model.adapter)
+            recognise = getattr(adapter, "recognise_drawing", None)
+            if not callable(recognise):
+                raise ModelUnavailableError(
+                    "The model adapter does not support drawing input."
+                )
+            return recognise(image_data_url, canvas_polarity)
+        except InvalidInputError as exc:
+            return _result("invalid_input", str(exc))
+        except ModelUnavailableError:
+            LOGGER.exception("The digit model could not be loaded or used.")
+            return _result("error", MODEL_ERROR_MESSAGE)
+        except Exception:
+            LOGGER.exception("Unexpected failure while recognising a drawing.")
+            return _result("error", MODEL_ERROR_MESSAGE)
