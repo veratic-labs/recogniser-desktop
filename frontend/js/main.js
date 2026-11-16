@@ -1,4 +1,4 @@
-/* Shared navigation: welcome model list, model views, and appearance. */
+/* Shared navigation: welcome category list, category views, and appearance. */
 
 (function () {
   "use strict";
@@ -14,12 +14,14 @@
 
   const dom = {
     welcomeView: document.getElementById("welcome-view"),
-    modelView: document.getElementById("model-view"),
-    modelList: document.getElementById("model-list"),
-    modelCount: document.getElementById("model-count"),
-    modelTitle: document.getElementById("model-title"),
+    categoryView: document.getElementById("category-view"),
+    categoryList: document.getElementById("category-list"),
+    categoryCount: document.getElementById("category-count"),
+    categoryTitle: document.getElementById("category-title"),
+    categoryGuidance: document.getElementById("category-guidance"),
     modelDescription: document.getElementById("model-description"),
     modelInstructions: document.getElementById("model-instructions"),
+    modelSelect: document.getElementById("model-select"),
     settingsButton: document.getElementById("settings-button"),
     settingsMenu: document.getElementById("settings-menu"),
     themeOptions: document.getElementById("theme-options"),
@@ -34,9 +36,10 @@
   };
 
   const state = {
-    models: [],
+    categories: [],
     loaded: false,
     loadError: false,
+    currentCategoryId: null,
     currentModelId: null,
     activeModeId: null,
     hostToken: 0,
@@ -62,9 +65,21 @@
     }
   }
 
-  function currentModel() {
+  function currentCategory() {
     return (
-      state.models.find((model) => model.id === state.currentModelId) || null
+      state.categories.find(
+        (category) => category.id === state.currentCategoryId
+      ) || null
+    );
+  }
+
+  function currentModel() {
+    const category = currentCategory();
+    if (!category || !Array.isArray(category.models)) {
+      return null;
+    }
+    return (
+      category.models.find((model) => model.id === state.currentModelId) || null
     );
   }
 
@@ -90,71 +105,101 @@
   }
 
   function renderWelcome() {
-    clearElement(dom.modelList);
-    dom.modelCount.textContent = "";
+    clearElement(dom.categoryList);
+    dom.categoryCount.textContent = "";
 
     if (state.loadError) {
       const box = make("div", "empty-state");
       box.append(
-        make("p", "empty-title", "Models aren’t available"),
+        make("p", "empty-title", "Categories aren’t available"),
         make(
           "p",
           null,
-          "The model list could not be loaded from the application backend."
+          "The category list could not be loaded from the application backend."
         )
       );
       const retry = make("button", "button secondary", "Try again");
       retry.type = "button";
-      retry.addEventListener("click", loadModels);
+      retry.addEventListener("click", loadCategories);
       box.append(retry);
-      dom.modelList.append(box);
+      dom.categoryList.append(box);
       return;
     }
 
     if (!state.loaded) {
-      dom.modelList.append(make("p", "placeholder", "Loading models…"));
+      dom.categoryList.append(
+        make("p", "placeholder", "Loading categories…")
+      );
       return;
     }
 
-    dom.modelCount.textContent =
-      state.models.length === 1
+    dom.categoryCount.textContent =
+      state.categories.length === 1
         ? "1 available"
-        : state.models.length + " available";
+        : state.categories.length + " available";
 
-    if (state.models.length === 0) {
-      dom.modelList.append(
-        make("p", "placeholder", "No models are registered.")
+    if (state.categories.length === 0) {
+      dom.categoryList.append(
+        make("p", "placeholder", "No categories are registered.")
       );
       return;
     }
 
-    state.models.forEach((model) => {
-      const card = make("button", "model-card");
+    state.categories.forEach((category) => {
+      const card = make("button", "category-card");
       card.type = "button";
-      card.addEventListener("click", () => openModel(model.id));
+      card.addEventListener("click", () => openCategory(category.id));
 
-      const body = make("span", "model-card-body");
+      const body = make("span", "category-card-body");
       body.append(
-        make("span", "model-card-name", model.display_name),
-        make("span", "model-card-description", model.description)
+        make("span", "category-card-name", category.label),
+        make("span", "category-card-description", category.description)
       );
 
-      const action = make("span", "model-card-action", "Open");
+      const action = make("span", "category-card-action", "Open");
       action.insertAdjacentHTML("beforeend", ARROW_ICON);
 
       card.append(body, action);
-      dom.modelList.append(card);
+      dom.categoryList.append(card);
     });
+  }
+
+  function renderModelSelect() {
+    clearElement(dom.modelSelect);
+    const category = currentCategory();
+    if (!category) {
+      dom.modelSelect.disabled = true;
+      return;
+    }
+
+    const models = Array.isArray(category.models) ? category.models : [];
+    models.forEach((model) => {
+      const option = document.createElement("option");
+      option.value = model.id;
+      option.textContent = model.display_name;
+      dom.modelSelect.append(option);
+    });
+
+    /* The dropdown stays visible and enabled with one model, so another
+       registered model can be selected without changing this view. */
+    dom.modelSelect.disabled = models.length === 0;
+    dom.modelSelect.value = state.currentModelId || "";
+  }
+
+  function updateModelText() {
+    const model = currentModel();
+    dom.modelDescription.textContent = model ? model.description : "";
+    dom.modelInstructions.textContent = model ? model.instructions : "";
   }
 
   function renderModeTabs() {
     clearElement(dom.modeTabs);
-    const model = currentModel();
-    if (!model) {
+    const category = currentCategory();
+    if (!category) {
       return;
     }
 
-    model.input_modes.forEach((mode) => {
+    category.input_modes.forEach((mode) => {
       const tab = make("button", "mode-tab", mode.label);
       tab.type = "button";
       tab.id = "mode-tab-" + mode.id;
@@ -212,8 +257,57 @@
         dom.recogniseButton.disabled = true;
         clearResult();
         setStatus("");
+      },
+      /* The mounted input reads the current category and model when it
+         submits, so a model switch keeps the same input panel. */
+      getCategory() {
+        return currentCategory();
+      },
+      getModel() {
+        return currentModel();
       }
     };
+  }
+
+  function resetRecognitionState() {
+    state.recognitionToken += 1;
+    state.recognitionBusy = false;
+    dom.recogniseButton.textContent = "Recognise";
+  }
+
+  function updateRecognitionReadiness() {
+    const submission = state.submission;
+    const ready =
+      !state.recognitionBusy &&
+      submission !== null &&
+      typeof submission.isReady === "function" &&
+      Boolean(submission.isReady());
+    dom.recogniseButton.disabled = !ready;
+  }
+
+  function selectModel(modelId) {
+    const category = currentCategory();
+    if (!category || modelId === state.currentModelId) {
+      return;
+    }
+
+    const model = (category.models || []).find((entry) => entry.id === modelId);
+    if (!model) {
+      dom.modelSelect.value = state.currentModelId || "";
+      return;
+    }
+
+    state.currentModelId = model.id;
+    dom.modelSelect.value = model.id;
+    updateModelText();
+
+    /* The mounted input is reused unchanged. A pending request for the
+       previous model can no longer update the view, and a result or message
+       produced by that model is no longer relevant. */
+    resetRecognitionState();
+    clearResult();
+    setStatus("");
+    updateRecognitionReadiness();
   }
 
   function applyResult(result) {
@@ -251,6 +345,10 @@
 
   async function recogniseCurrentInput() {
     if (state.recognitionBusy) {
+      return;
+    }
+
+    if (!currentModel()) {
       return;
     }
 
@@ -311,42 +409,51 @@
     dom.modePanel.tabIndex = 0;
     setStatus("");
 
-    const model = currentModel();
-    if (!model) {
+    const category = currentCategory();
+    if (!category) {
       return;
     }
 
-    const mode = model.input_modes.find(
+    const model = currentModel();
+    if (!model) {
+      dom.modePanel.append(
+        make("p", "mode-note", "This category has no models registered yet.")
+      );
+      setStatus("This category has no models registered yet.", "warning");
+      return;
+    }
+
+    const mode = category.input_modes.find(
       (entry) => entry.id === state.activeModeId
     );
     if (!mode) {
       dom.modePanel.append(
-        make("p", "mode-note", "This model has no input modes yet.")
+        make("p", "mode-note", "This category has no input modes yet.")
       );
-      setStatus("This model has no input modes yet.", "warning");
+      setStatus("This category has no input modes yet.", "warning");
       return;
     }
 
-    const view = views[model.frontend_view];
+    const view = views[category.frontend_view];
     if (!view || typeof view.renderMode !== "function") {
       dom.modePanel.append(
-        make("p", "mode-note", "This model does not have an interface yet.")
+        make("p", "mode-note", "This category does not have an interface yet.")
       );
-      setStatus("This model does not have an interface yet.", "error");
+      setStatus("This category does not have an interface yet.", "error");
       return;
     }
 
-    view.renderMode(mode, dom.modePanel, model, createModeHost());
+    view.renderMode(mode, dom.modePanel, createModeHost());
     dom.modePanel.setAttribute("aria-labelledby", "mode-tab-" + mode.id);
     dom.modeHint.textContent = mode.hint;
   }
 
   function selectMode(modeId) {
-    const model = currentModel();
-    if (!model) {
+    const category = currentCategory();
+    if (!category) {
       return;
     }
-    const mode = model.input_modes.find((entry) => entry.id === modeId);
+    const mode = category.input_modes.find((entry) => entry.id === modeId);
     if (!mode) {
       return;
     }
@@ -356,39 +463,43 @@
     renderModePanel();
   }
 
-  function renderModelView() {
-    const model = currentModel();
-    if (!model) {
+  function renderCategoryView() {
+    const category = currentCategory();
+    if (!category) {
       return;
     }
 
-    dom.modelTitle.textContent = model.display_name;
-    dom.modelDescription.textContent = model.description;
-    dom.modelInstructions.textContent = model.instructions;
+    dom.categoryTitle.textContent = category.label;
+    dom.categoryGuidance.textContent = category.guidance;
 
+    renderModelSelect();
+    updateModelText();
     renderModeTabs();
     renderModePanel();
   }
 
-  function openModel(modelId) {
-    const model = state.models.find((entry) => entry.id === modelId);
-    if (!model) {
+  function openCategory(categoryId) {
+    const category = state.categories.find((entry) => entry.id === categoryId);
+    if (!category) {
       return;
     }
 
-    state.currentModelId = model.id;
-    state.activeModeId = model.input_modes.length
-      ? model.input_modes[0].id
+    const models = Array.isArray(category.models) ? category.models : [];
+    state.currentCategoryId = category.id;
+    state.currentModelId = models.length ? models[0].id : null;
+    state.activeModeId = category.input_modes.length
+      ? category.input_modes[0].id
       : null;
 
-    renderModelView();
+    renderCategoryView();
     dom.welcomeView.hidden = true;
-    dom.modelView.hidden = false;
+    dom.categoryView.hidden = false;
     closeSettingsMenu();
     window.scrollTo(0, 0);
   }
 
   function showWelcome() {
+    state.currentCategoryId = null;
     state.currentModelId = null;
     state.activeModeId = null;
     state.hostToken += 1;
@@ -400,7 +511,7 @@
     dom.recogniseButton.title = "";
     clearResult();
     setStatus("");
-    dom.modelView.hidden = true;
+    dom.categoryView.hidden = true;
     dom.welcomeView.hidden = false;
     closeSettingsMenu();
     window.scrollTo(0, 0);
@@ -422,6 +533,10 @@
     dom.brandButton.addEventListener("click", showWelcome);
     dom.backButton.addEventListener("click", showWelcome);
     dom.recogniseButton.addEventListener("click", recogniseCurrentInput);
+
+    dom.modelSelect.addEventListener("change", () => {
+      selectModel(dom.modelSelect.value);
+    });
 
     dom.settingsButton.addEventListener("click", () => {
       const willOpen = dom.settingsMenu.hidden;
@@ -476,25 +591,29 @@
     });
   }
 
-  async function loadModels() {
+  async function loadCategories() {
     state.loaded = false;
     state.loadError = false;
     renderWelcome();
 
     try {
-      state.models = await bridge.getModels();
+      state.categories = await bridge.getCategories();
       state.loaded = true;
     } catch (error) {
-      console.error("Could not load the model registry:", error);
-      state.models = [];
+      console.error("Could not load the category registry:", error);
+      state.categories = [];
       state.loadError = true;
     }
 
     renderWelcome();
 
-    if (state.currentModelId) {
-      if (state.models.some((model) => model.id === state.currentModelId)) {
-        renderModelView();
+    if (state.currentCategoryId) {
+      if (
+        state.categories.some(
+          (category) => category.id === state.currentCategoryId
+        )
+      ) {
+        renderCategoryView();
       } else {
         showWelcome();
       }
@@ -506,5 +625,5 @@
   window.recogniser.appReady = false;
   bindEvents();
   renderWelcome();
-  loadModels();
+  loadCategories();
 })();

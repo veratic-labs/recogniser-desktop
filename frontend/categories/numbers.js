@@ -1,4 +1,8 @@
-/* Interface for recogniser 0 (numbers): image upload and freehand drawing. */
+/* Shared Numbers category interface: image upload and freehand drawing.
+
+   The same view serves every model registered in the category. The selected
+   model is read when a submission starts, so switching models reuses the
+   mounted input instead of rebuilding it. */
 
 (function () {
   "use strict";
@@ -317,7 +321,7 @@
     return ACCEPTED_EXTENSIONS.has(extension);
   }
 
-  function renderUpload(container, model, host) {
+  function renderUpload(container, host) {
     const area = document.createElement("div");
     area.className = "input-area";
 
@@ -329,9 +333,8 @@
     description.className = "input-area-text";
     description.textContent =
       "Choose a PNG or JPEG image containing one handwritten digit. The " +
-      "picture is prepared for the " +
-      model.input_label +
-      " model input before recognition.";
+      "picture is prepared for the selected model's input format before " +
+      "recognition.";
 
     const chooseButton = document.createElement("button");
     chooseButton.type = "button";
@@ -405,8 +408,17 @@
 
     host.provideSubmission({
       isReady: () => selection !== null,
-      submit: () =>
-        window.recogniser.bridge.recogniseUpload(model.id, selection.dataUrl)
+      submit: () => {
+        /* Read the selection at submission time, so a model switch reuses
+           the mounted preview instead of rebuilding the input panel. */
+        const category = host.getCategory();
+        const model = host.getModel();
+        return window.recogniser.bridge.recogniseCategoryUpload(
+          category.id,
+          model.id,
+          selection.dataUrl
+        );
+      }
     });
     host.setReady(false, "Choose an image to recognise.");
     host.setStatus("Choose a local image, then run the model.", "info");
@@ -486,7 +498,7 @@
     });
   }
 
-  function renderDrawing(container, model, host) {
+  function renderDrawing(container, host) {
     const frame = document.createElement("div");
     frame.className = "canvas-frame";
 
@@ -545,9 +557,13 @@
       isReady: () => controller.hasInk(),
       submit: () => {
         /* Polarity is captured with the pixels, so a later theme change
-           cannot alter how this drawing is interpreted. */
+           cannot alter how this drawing is interpreted. The selected model
+           is read now, not when this view was mounted. */
+        const category = host.getCategory();
+        const model = host.getModel();
         const drawing = controller.snapshot();
-        return window.recogniser.bridge.recogniseDrawing(
+        return window.recogniser.bridge.recogniseCategoryDrawing(
+          category.id,
           model.id,
           drawing.dataUrl,
           drawing.polarity
@@ -564,10 +580,10 @@
     drawing: renderDrawing
   };
 
-  function renderMode(mode, container, model, host) {
+  function renderMode(mode, container, host) {
     const render = renderers[mode.id];
     if (render) {
-      render(container, model, host);
+      render(container, host);
       return;
     }
     host.setReady(false, "This input mode is not available.");

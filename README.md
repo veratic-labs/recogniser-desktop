@@ -1,9 +1,10 @@
 # recogniser
 
 A minimal desktop application for trying trained neural networks on your own
-input. This build covers **Milestones 1 to 3**: the desktop shell, welcome
-screen, registry-driven model list, model interaction view, appearance settings,
-and image-upload and freehand-drawing recognition for the digit model.
+input. This build covers **Milestones 1 to 3** and the category-navigation
+refactor: the desktop shell, welcome screen, registry-driven category list,
+shared category view with a model dropdown, appearance settings, and
+image-upload and freehand-drawing recognition for the digit model.
 
 ## Requirements
 
@@ -29,10 +30,18 @@ python -m backend.main
 
 ## Current behaviour
 
-- The welcome screen shows a **Select a model** list of registered models,
-  currently only `recogniser 0 (numbers)`.
-- Selecting a model opens its interaction view. Use **Back to models** or the
-  header wordmark to return to the welcome screen and choose another model.
+- The welcome screen shows a **Select a category** list of registered
+  categories, currently only `Numbers`.
+- Selecting a category opens its shared interaction view, which serves every
+  model registered in that category. Use **Back to categories** or the header
+  wordmark to return to the welcome screen and choose another category.
+- The **Model** dropdown sits in the action row immediately to the left of
+  **Recognise** and lists the category's registered models, initially
+  `recogniser 0 (numbers)`. Switching models keeps the current image or
+  drawing, clears the previous result and any model-specific message, and
+  ignores a recognition request that was still outstanding for the previous
+  model. The description and instructions above the input area describe the
+  selected model.
 - **Image upload** accepts PNG and JPEG files up to 20 MB. **Choose image**
   opens the file picker. A valid selection replaces the upload placeholder with
   the original image in a responsive preview of approximately 320 × 320 CSS
@@ -79,12 +88,12 @@ python -m backend.main
 backend/
   main.py            Desktop entry point and pywebview setup
   api.py             Functions exposed to the frontend
-  model_registry.py  Shared model registration data
+  model_registry.py  Shared category and model registration data
   adapters/          Per-model preprocessing and inference
 frontend/
   index.html         Application shell and views
   css/               Layout and theme styles
   js/                Navigation, bridge, and appearance logic
-  models/            Model-specific interface modules
+  categories/        Shared per-category interface modules
 models/0-numbers/    ONNX model and original inference script
 ```

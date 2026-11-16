@@ -29,27 +29,37 @@
     });
   }
 
-  async function getModels() {
+  async function getCategories() {
     const api = await waitForApi(10000);
-    const models = await api.get_models();
-    if (!Array.isArray(models)) {
-      throw new Error("The backend returned an unexpected model registry.");
+    const categories = await api.get_categories();
+    if (!Array.isArray(categories)) {
+      throw new Error("The backend returned an unexpected category registry.");
     }
-    return models;
+    return categories;
   }
 
-  async function recogniseUpload(modelId, imageDataUrl) {
+  async function recogniseCategoryUpload(categoryId, modelId, imageDataUrl) {
     const api = await waitForApi(10000);
-    const result = await api.recognise_upload(modelId, imageDataUrl);
+    const result = await api.recognise_category_upload(
+      categoryId,
+      modelId,
+      imageDataUrl
+    );
     if (!result || typeof result !== "object") {
       throw new Error("The backend returned an unexpected recognition result.");
     }
     return result;
   }
 
-  async function recogniseDrawing(modelId, imageDataUrl, canvasPolarity) {
+  async function recogniseCategoryDrawing(
+    categoryId,
+    modelId,
+    imageDataUrl,
+    canvasPolarity
+  ) {
     const api = await waitForApi(10000);
-    const result = await api.recognise_drawing(
+    const result = await api.recognise_category_drawing(
+      categoryId,
       modelId,
       imageDataUrl,
       canvasPolarity
@@ -60,5 +70,9 @@
     return result;
   }
 
-  window.recogniser.bridge = { getModels, recogniseUpload, recogniseDrawing };
+  window.recogniser.bridge = {
+    getCategories,
+    recogniseCategoryUpload,
+    recogniseCategoryDrawing
+  };
 })();

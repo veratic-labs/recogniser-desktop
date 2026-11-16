@@ -45,46 +45,53 @@
           <h1 id="welcome-title">Welcome to recogniser</h1>
           <p class="lede">
             A small desktop app for trying trained neural networks on your own
-            input. Choose a model below to get started.
+            input. Choose a category below to get started.
           </p>
         </div>
 
-        <section class="model-section" aria-labelledby="models-title">
+        <section class="category-section" aria-labelledby="categories-title">
           <div class="section-heading">
-            <h2 id="models-title">Select a model</h2>
-            <span class="count" id="model-count"></span>
+            <h2 id="categories-title">Select a category</h2>
+            <span class="count" id="category-count"></span>
           </div>
-          <div class="model-list" id="model-list" aria-live="polite">
-            <p class="placeholder">Loading models…</p>
+          <div class="category-list" id="category-list" aria-live="polite">
+            <p class="placeholder">Loading categories…</p>
           </div>
         </section>
       </section>
 
-      <section class="model-view" id="model-view" aria-labelledby="model-title" hidden>
+      <section class="category-view" id="category-view" aria-labelledby="category-title" hidden>
         <button class="back-button" id="back-button" type="button">
           <svg viewBox="0 0 16 16" width="14" height="14" fill="none"
                stroke="currentColor" stroke-width="1.5"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <path d="M10 3.5 5.5 8l4.5 4.5"></path>
           </svg>
-          Back to models
+          Back to categories
         </button>
 
-        <div class="model-view-header">
-          <h1 id="model-title"></h1>
-          <p class="model-description" id="model-description"></p>
-          <p class="model-instructions" id="model-instructions"></p>
+        <div class="category-header">
+          <h1 id="category-title"></h1>
+          <p class="category-guidance" id="category-guidance"></p>
         </div>
 
         <div class="panel">
+          <p class="model-description" id="model-description"></p>
+          <p class="model-instructions" id="model-instructions"></p>
           <div class="mode-tabs" id="mode-tabs" role="tablist" aria-label="Input mode"></div>
           <div class="mode-panel" id="mode-panel" role="tabpanel"></div>
           <div class="result" id="result-area" role="group" aria-label="Prediction result" hidden></div>
           <div class="panel-footer">
             <p class="panel-hint" id="mode-hint"></p>
-            <button class="button primary" id="recognise-button" type="button" disabled>
-              Recognise
-            </button>
+            <div class="panel-footer-actions">
+              <div class="model-picker">
+                <label class="model-picker-label" for="model-select">Model</label>
+                <select class="model-select" id="model-select"></select>
+              </div>
+              <button class="button primary" id="recognise-button" type="button" disabled>
+                Recognise
+              </button>
+            </div>
           </div>
           <p class="status" id="status-message" role="status" data-tone="info"></p>
         </div>
@@ -94,7 +101,7 @@
 
   <script src="js/bridge.js"></script>
   <script src="js/settings.js"></script>
-  <script src="models/numbers.js"></script>
+  <script src="categories/numbers.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

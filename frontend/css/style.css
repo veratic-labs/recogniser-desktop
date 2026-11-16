@@ -230,7 +230,7 @@ p {
   line-height: 1.6;
 }
 
-.model-section {
+.category-section {
   margin-top: 44px;
 }
 
@@ -252,13 +252,13 @@ p {
   font-size: 12.5px;
 }
 
-.model-list {
+.category-list {
   display: grid;
   gap: 10px;
   margin-top: 12px;
 }
 
-.model-card {
+.category-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -275,30 +275,30 @@ p {
   transition: border-color 120ms ease, background-color 120ms ease;
 }
 
-.model-card:hover {
+.category-card:hover {
   border-color: var(--color-border-strong);
   background: var(--color-surface-hover);
 }
 
-.model-card-body {
+.category-card-body {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: 0;
 }
 
-.model-card-name {
+.category-card-name {
   font-size: 15px;
   font-weight: 600;
 }
 
-.model-card-description {
+.category-card-description {
   color: var(--color-text-muted);
   font-size: 13.5px;
   line-height: 1.5;
 }
 
-.model-card-action {
+.category-card-action {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -307,7 +307,7 @@ p {
   font-size: 12.5px;
 }
 
-.model-card:hover .model-card-action {
+.category-card:hover .category-card-action {
   color: var(--color-text);
 }
 
@@ -345,9 +345,9 @@ p {
   background: var(--color-surface-muted);
 }
 
-/* Model view */
+/* Category view */
 
-.model-view {
+.category-view {
   width: 100%;
   max-width: 840px;
   margin: 0 auto;
@@ -373,7 +373,7 @@ p {
   color: var(--color-text);
 }
 
-.model-view-header h1 {
+.category-header h1 {
   margin: 0;
   font-size: 26px;
   font-weight: 600;
@@ -381,8 +381,46 @@ p {
   line-height: 1.25;
 }
 
-.model-description {
+.category-guidance {
   margin: 8px 0 0;
+  color: var(--color-text-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.model-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-picker-label {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.model-select {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.model-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.model-description {
+  margin: 0;
   color: var(--color-text-muted);
   font-size: 14.5px;
   line-height: 1.55;
@@ -405,6 +443,7 @@ p {
 .mode-tabs {
   display: inline-flex;
   gap: 2px;
+  margin-top: 16px;
   padding: 3px;
   background: var(--color-surface-muted);
   border: 1px solid var(--color-border);
@@ -593,11 +632,34 @@ p {
 
 .panel-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--color-border);
+}
+
+/* The model dropdown sits in the action row, immediately left of the
+   recognition button. The row wraps instead of overflowing when narrow. */
+.panel-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.panel-footer .model-picker {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.panel-footer .model-select {
+  flex: 0 1 14rem;
+  min-width: 7rem;
+  max-width: 100%;
 }
 
 .panel-hint {
@@ -677,11 +739,11 @@ p {
     font-size: 26px;
   }
 
-  .model-view-header h1 {
+  .category-header h1 {
     font-size: 23px;
   }
 
-  .model-card {
+  .category-card {
     padding: 16px;
   }
 
@@ -697,6 +759,21 @@ p {
   .panel-footer {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .panel-footer-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .panel-footer .model-picker {
+    width: 100%;
+  }
+
+  .panel-footer .model-select {
+    flex: 1;
+    width: auto;
   }
 
   .panel-footer .button {
