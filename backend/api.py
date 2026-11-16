@@ -25,6 +25,10 @@ MODE_SUPPORT_MESSAGES = {
     "upload": "That category does not support image upload.",
     "drawing": "That category does not support drawing input.",
 }
+# Used when an input mode has no specific support message.
+DEFAULT_MODE_SUPPORT_MESSAGE = (
+    "That category does not support this input mode."
+)
 
 
 def _result(status: str, message: str) -> dict[str, Any]:
@@ -54,7 +58,10 @@ def _resolve(
         )
 
     if not any(mode.id == mode_id for mode in category.input_modes):
-        return None, _result("error", MODE_SUPPORT_MESSAGES[mode_id])
+        return None, _result(
+            "error",
+            MODE_SUPPORT_MESSAGES.get(mode_id, DEFAULT_MODE_SUPPORT_MESSAGE),
+        )
 
     return model, None
 

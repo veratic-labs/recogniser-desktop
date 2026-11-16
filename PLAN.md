@@ -2,7 +2,7 @@
 
 Status: requirements draft v0.8. Confirmed decisions and provisional proposals are identified separately. This document defines the product, architecture, implementation milestones, and acceptance criteria. Agent workflow instructions will be maintained separately in `AGENT.md`.
 
-Current state: Milestones 1–3 are implemented, and the category-navigation refactor recorded in Section 8 is implemented across backend and frontend. The legacy model-based API has been removed, so the category-aware methods are the only recognition entry points. Milestone 4 remains open.
+Current state: Milestones 1–4 are complete. The category-navigation refactor recorded in Section 8 is implemented across backend and frontend. The legacy model-based API has been removed, so the category-aware methods are the only recognition entry points. Milestone 4 delivered category-owned successful-result rendering, the API mode-message fallback, focused tests with extension documentation, and final regression verification; user acceptance of the interface is confirmed.
 
 ## 1. Project Goal
 
@@ -333,13 +333,15 @@ The category-aware API is implemented and exposed through the pywebview bridge:
 
 Category payloads carry interactions only. Model payloads carry `id`, `category_id`, `series`, `display_name`, `description`, `instructions`, and `input_label`; adapters and resource directories stay backend-internal. A request is rejected when the category is unknown, the model is unknown, the model belongs to another category, or the category does not offer the requested input mode. Unexpected internal failures return the generic `error` envelope without exposing implementation details.
 
-The earlier model-based API is retained only as a temporary compatibility shim for the current frontend: `get_models()` returns the model payloads the welcome list already renders, while `recognise_upload(model_id, image_data_url)` and `recognise_drawing(model_id, image_data_url, canvas_polarity)` resolve the model's category and delegate to the category-aware calls. These three methods are removed once the frontend requests categories, so no new frontend code should depend on them.
+The earlier model-based API has been removed. `get_models()`, `recognise_upload()`, and `recognise_drawing()` are no longer exposed; the category-aware calls above are the only recognition entry points, so frontend code must not depend on the legacy methods.
 
 Future models can return model-specific data within the shared status envelope. Image-transfer format and payload schemas beyond the digit models remain implementation details to settle for those models.
 
+Successful-result presentation belongs to the category's frontend view. Shared result handling is category-neutral: it must not require an integer prediction or a confidence score, and it preserves the existing Numbers result presentation while delegating display of an `ok` result to the current category view.
+
 ## 8. Implementation Milestones and Acceptance Criteria
 
-Milestones 1–3 are complete and kept below as project history; their navigation wording describes what those milestones delivered at the time and has since been superseded by the category-navigation refactor recorded after them. Milestone 4 remains open.
+Milestones 1–4 are complete. Milestones 1–3 and the category-navigation refactor are kept below as project history; their navigation wording describes what those milestones delivered at the time and has since been superseded by the category-navigation refactor recorded after them. Milestone 4's approved sequence and boundaries are recorded in that milestone below.
 
 ### Milestone 1: Desktop Shell and Navigation
 
@@ -390,14 +392,45 @@ Frontend — complete:
 
 ### Milestone 4: End-to-End Verification and Usage Documentation
 
-Status: pending.
+Status: complete — Steps 1–4 implemented; regression verification passed; user acceptance confirmed.
+
+The approved direction keeps the milestone's verification and documentation goals and adds only the minimal extension-readiness changes needed for future categories and models.
+
+Approved implementation sequence:
+
+1. Move successful-result presentation into each category's `renderResult()` and make shared result handling category-neutral. (Implemented.)
+2. Add the small API mode-message lookup fallback. (Implemented.)
+3. Add focused, reproducible stdlib backend checks (a small `unittest` module) and complete the extension documentation. (Implemented.)
+4. Run regression checks and submit the milestone for manual acceptance. (Verification passed; user acceptance confirmed.)
+
+Step 4 verification completed against the combined working tree:
+
+- The `unittest` suite under `tests/` passed all 13 checks.
+- Live pywebview category-navigation and bridge checks passed all 41 checks, including real upload and drawing recognition, repeated recognition, model switching with isolated fixtures, stale-response rejection, status messages, responsive action-row geometry, and removal of the legacy API.
+- Category-owned result rendering checks passed all 7 checks, including a successful non-integer result and the no-renderer fallback.
+- Remaining live checks passed all 13 checks, including image replacement, invalid-input and model-error recovery, Light and Dark drawing palettes, drawing preservation, and Follow system resolving to both system Light and Dark.
+- The checks launched the real window and inspected the DOM and bridge through `evaluate_js`. No screenshots were captured and no automated visual inspection was performed. Visual appearance, spacing, alignment, and interaction quality were reviewed and accepted by the user.
+
+Confirmed boundaries:
+
+- One adapter module per model is the current implementation convention, not a permanent architectural restriction. The current model must retain its own correct resource mapping.
+- The 28 × 28 input and the 0.90 threshold belong to `numbers-0`; they do not automatically apply to every future Numbers model.
+- Shared result handling must not require an integer prediction or a confidence score.
+- Preserve the existing Numbers result presentation and recognition behaviour.
+- Do not extract shared upload or image-processing modules until a second real consumer demonstrates the need.
+- No new dependencies, placeholder models or categories, plugin framework, or automatic discovery.
+- Keep tests focused on registry integrity, API validation, result delegation, and essential regressions.
+- A non-digit image is not guaranteed to produce low confidence. Use controlled scores to verify threshold behaviour.
+- No screenshot or visual-inspection work. The user reviews the UI and accepts the interface.
+
+Verification and acceptance requirements:
 
 - Verify category/model/mode navigation, repeated recognition, model switching with existing input, error recovery, and view state.
 - Keep the interface responsive during inference and prevent duplicate submissions or stale results from replacing current input results, including results for a previously selected model.
 - Document dependencies, launch instructions, and the process for adding another model or category.
 - Acceptance: the agreed entry point launches the application, both recognition flows work end to end for the selected model, and no stale result can replace the result for the current model and input.
 
-Targeted automated checks cover confidence values `0.8999`, `0.90`, and `0.9001`, along with preprocessing shape, data type, range, and both `canvas_polarity` branches. Threshold-boundary checks use controlled scores rather than depending on an actual model to produce an exact boundary value.
+The `unittest` suite under `tests/` covers registry integrity, API validation, adapter error mapping, and successful-result passthrough. It does not include threshold-boundary or preprocessing-shape checks. The `numbers-0` adapter's `0.90` threshold and 28 × 28 preprocessing are unchanged by Milestone 4; any future threshold-boundary checks should use controlled scores rather than depending on an actual model to produce an exact boundary value.
 
 ## 9. Outside the First Release
 

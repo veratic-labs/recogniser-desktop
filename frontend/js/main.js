@@ -94,14 +94,32 @@
     delete dom.resultArea.dataset.tone;
   }
 
-  function showPrediction(digit) {
-    clearElement(dom.resultArea);
-    dom.resultArea.append(
-      make("p", "result-label", "Predicted digit"),
-      make("p", "result-digit", String(digit))
-    );
+  /* A category view owns the markup for a successful result. It returns true
+     after adding content; a missing renderer, or one that declines the result,
+     still leaves the recognition itself successful. */
+  function showCategoryResult(result) {
+    clearResult();
+    const category = currentCategory();
+    const view = category ? views[category.frontend_view] : null;
+    if (!view || typeof view.renderResult !== "function") {
+      return false;
+    }
+
+    let rendered = false;
+    try {
+      rendered = view.renderResult(result, dom.resultArea) === true;
+    } catch (error) {
+      console.error("Category result renderer failed:", error);
+    }
+
+    if (!rendered) {
+      clearResult();
+      return false;
+    }
+
     dom.resultArea.dataset.tone = "success";
     dom.resultArea.hidden = false;
+    return true;
   }
 
   function renderWelcome() {
@@ -320,12 +338,9 @@
       return;
     }
 
-    if (result.status === "ok" && Number.isInteger(result.prediction)) {
-      showPrediction(result.prediction);
-      setStatus(
-        result.message || "Recognised digit: " + result.prediction + ".",
-        "success"
-      );
+    if (result.status === "ok") {
+      showCategoryResult(result);
+      setStatus(result.message || "Recognised.", "success");
       return;
     }
 
@@ -367,7 +382,7 @@
     dom.recogniseButton.disabled = true;
     dom.recogniseButton.textContent = "Recognising…";
     clearResult();
-    setStatus("Recognising the digit…", "info");
+    setStatus("Recognising…", "info");
 
     try {
       const result = await submission.submit();

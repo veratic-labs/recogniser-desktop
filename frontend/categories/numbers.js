@@ -591,5 +591,25 @@
     container.append(createNote("This input mode has no interface yet."));
   }
 
-  window.recogniser.views.numbers = { renderMode };
+  /* The Numbers view owns digit-specific result markup. A successful result
+     whose prediction is not an integer has no card to show here; the shared
+     layer still reports that recognition succeeded. */
+  function renderResult(result, container) {
+    if (!container || !Number.isInteger(result.prediction)) {
+      return false;
+    }
+
+    const label = document.createElement("p");
+    label.className = "result-label";
+    label.textContent = "Predicted digit";
+
+    const value = document.createElement("p");
+    value.className = "result-digit";
+    value.textContent = String(result.prediction);
+
+    container.append(label, value);
+    return true;
+  }
+
+  window.recogniser.views.numbers = { renderMode, renderResult };
 })();
