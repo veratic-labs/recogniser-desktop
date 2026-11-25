@@ -201,7 +201,10 @@ function Write-BundleManifest {
         files = $entries
     }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
-    $manifest | ConvertTo-Json -Depth 5 | Out-File -LiteralPath $Path -Encoding utf8
+    # Windows PowerShell's Out-File -Encoding utf8 writes a BOM, which strict JSON
+    # readers reject. The reviewed-bundle record must be plain UTF-8.
+    $json = $manifest | ConvertTo-Json -Depth 5
+    [System.IO.File]::WriteAllText($Path, $json, (New-Object System.Text.UTF8Encoding($false)))
     Write-Detail ("manifest: {0} ({1} files)" -f $Path, $entries.Count)
 }
 
@@ -362,9 +365,13 @@ if (-not $pyInstallerVersion) {
 Write-Detail "PyInstaller: $pyInstallerVersion"
 
 # packaging\ must not shadow the installed packaging library: PyInstaller imports
-# it, and a name clash produces confusing analysis failures.
+# it, and a name clash produces confusing analysis failures. Only a module that
+# resolves inside <project>\packaging is a clash; the virtual environment also
+# lives inside the project, so comparing against the project root would always
+# match site-packages.
 $packagingLibrary = (Get-ProcessOutput -FilePath $Python -Arguments @('-c', 'import packaging; print(packaging.__file__)') | Select-Object -Last 1)
-if ($packagingLibrary -like "$ProjectRoot*") {
+$packagingDirectory = (Join-Path $ProjectRoot 'packaging').TrimEnd('\') + '\'
+if ($packagingLibrary.StartsWith($packagingDirectory, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "The packaging\ directory shadows the installed packaging library ($packagingLibrary). Rename it or remove its __init__.py."
 }
 Write-Detail "packaging library: $packagingLibrary"
@@ -406,6 +413,16 @@ Invoke-BundleSelfTest -WorkingDirectory $selfTestCwd -DataDirectory (Join-Path $
 
 Write-Step 'Writing build\bundle-manifest.json'
 Write-BundleManifest -Directory $BundleDir -Path $ManifestPath
+
+Write-Step 'Re-verifying the bundle against the manifest it was just recorded from'
+$differences = @(Get-BundleManifestProblems -Directory $BundleDir -Path $ManifestPath)
+if ($differences.Count -gt 0) {
+    foreach ($difference in $differences) {
+        Write-Detail $difference
+    }
+    throw "The bundle changed while it was being recorded ($($differences.Count) file(s)). Rebuild before reviewing."
+}
+Write-Detail 'manifest matches the bundle exactly'
 
 Write-Step 'Build complete; nothing has been committed or packaged'
 Write-Detail "bundle: $BundleDir"

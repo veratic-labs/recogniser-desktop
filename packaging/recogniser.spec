@@ -32,6 +32,9 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=[
+        # The model adapters are named in backend/model_registry.py and loaded
+        # with importlib.import_module(), so static analysis cannot see them.
+        "backend.adapters.numbers",
         "onnxruntime",
         "webview.platforms.winforms",
         "webview.platforms.edgechromium",
