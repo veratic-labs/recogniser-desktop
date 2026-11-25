@@ -28,6 +28,7 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 
 from ..model_registry import find_model
+from ..paths import model_resource_path
 from . import InvalidInputError, ModelUnavailableError
 
 MODEL_ID = "numbers-0"
@@ -72,19 +73,22 @@ DRAWING_MISSING_POLARITY_MESSAGE = (
     "draw the digit again."
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
 Predictor = Callable[[np.ndarray], tuple[int, float]]
 _PREDICTOR: Predictor | None = None
 _PREDICTOR_LOCK = threading.Lock()
 
 
 def _model_resource(filename: str) -> Path:
-    """Return a resource path from the registered model directory."""
+    """Return a resource path from the registered model directory.
+
+    ``resource_dir`` is relative registration metadata, so it is resolved
+    through ``model_resource_path`` to work from a source checkout and from the
+    frozen bundle alike.
+    """
     model = find_model(MODEL_ID)
     if model is None:
         raise ModelUnavailableError("The digit model is not registered.")
-    return PROJECT_ROOT / model.resource_dir / filename
+    return model_resource_path(model.resource_dir, filename)
 
 
 def _decode_data_url(

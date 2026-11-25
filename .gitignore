@@ -17,6 +17,10 @@ env/
 # Local scratch space
 .tmp/
 
+# Packaging output (PyInstaller work directory and bundles, compiled installers)
+build/
+dist/
+
 # Editor and operating-system files
 .vscode/
 .idea/
