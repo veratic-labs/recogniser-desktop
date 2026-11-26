@@ -317,11 +317,17 @@ if ($Installer) {
         throw "The installer script is missing: $InstallerScript. The bundle was not packaged."
     }
 
-    $builtVersion = (Get-Item -LiteralPath $BundleExe).VersionInfo.FileVersion
+    # Compare the numeric PE version fields, not the display string: a version
+    # resource generated from '1.0.0' displays as "1.0.0" even when its fourth
+    # part is 0, so string comparison would reject a correct executable.
+    $versionInfo = (Get-Item -LiteralPath $BundleExe).VersionInfo
+    $builtVersion = '{0}.{1}.{2}.{3}' -f `
+        $versionInfo.FileMajorPart, $versionInfo.FileMinorPart, `
+        $versionInfo.FileBuildPart, $versionInfo.FilePrivatePart
     if ($builtVersion -ne $fileVersion) {
-        throw "The bundled executable version $builtVersion does not match packaging\version.txt ($fileVersion). Rebuild the bundle."
+        throw "The bundled executable numeric version $builtVersion (displayed as '$($versionInfo.FileVersion)') does not match packaging\version.txt ($fileVersion). Rebuild the bundle."
     }
-    Write-Detail "executable file version: $builtVersion"
+    Write-Detail "executable numeric version: $builtVersion (displayed as '$($versionInfo.FileVersion)')"
 
     $iscc = Find-Iscc -Explicit $IsccPath
     Write-Detail "ISCC: $iscc"
@@ -331,6 +337,18 @@ if ($Installer) {
         -Arguments @("/DAppVersion=$version", "/DAppVersion4=$fileVersion", $InstallerScript) `
         -LogPath (Join-Path $TempRoot 'iscc.log')
     Assert-ExitCode $code 'ISCC'
+
+    # Compiling must not have touched the bundle it packaged. If it did, the setup
+    # no longer wraps the reviewed files and must not be distributed.
+    Write-Step 'Re-checking dist\recogniser against the reviewed manifest after compilation'
+    $differences = @(Get-BundleManifestProblems -Directory $BundleDir -Path $ManifestPath)
+    if ($differences.Count -gt 0) {
+        foreach ($difference in $differences) {
+            Write-Detail $difference
+        }
+        throw "dist\recogniser changed while the installer was compiled ($($differences.Count) file(s)). Treat this setup as unreviewed, rebuild the bundle, and review it again."
+    }
+    Write-Detail 'bundle still matches the reviewed manifest'
 
     $setup = Join-Path $InstallerDir "recogniser-$version-setup.exe"
     if (-not (Test-Path -LiteralPath $setup)) {
