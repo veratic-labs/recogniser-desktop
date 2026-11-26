@@ -1,13 +1,16 @@
 # recogniser — Windows Packaging Plan
 
-Status: **Stage 3 input, corrections applied.** Stage 1 was accepted and Stage 2
-(`.gitignore`) is complete and accepted. The four corrections in section 11.1
-were applied before Stage 3 implementation. No commit has been made, and Stages
-4–6 are not started.
+Status: **Stages 1–6 accepted and committed.** The onedir bundle and the per-user
+Inno Setup installer are built and verified on this machine, and the user accepted
+the installed application after installing it, launching it from the Start menu,
+recognising an uploaded image and a drawing, and checking the icons. This
+revision reconciles the plan with what was actually built and records the
+commits made on explicit request: `2f9c70f`, `1c88f65`, `baa1c51`, and the
+documentation commit that carries this revision. Nothing has been pushed.
 
-Date: 24 November 2026; Stage 3 corrections revised 25 November 2026. Source
-requirements: `PLAN.md` (requirements draft v0.8) and `AGENTS.md` (workflow
-policy).
+Date: 24 November 2026; Stage 3 corrections 25 November 2026; reconciled with the
+accepted implementation 26 November 2026. Source requirements: `PLAN.md`
+(requirements draft v0.8) and `AGENTS.md` (workflow policy).
 
 Packaging is an authorised separate track. `PLAN.md` section 9 lists installer
 packaging as outside the first release; `PLAN.md` is deliberately not rewritten
@@ -45,11 +48,12 @@ a full stop until the user approves the next stage.
 
 ## 2. Environment
 
-### 2.1 Current verified state (this revision, 24 November 2026)
+### 2.1 Current verified state (re-checked 26 November 2026)
 
 | Item | Verified value |
 | --- | --- |
 | Virtual-environment interpreter | `C:\Users\Simon\veratic\recogniser\venv\Scripts\python.exe` |
+| Virtual-environment directory | `venv\`. No `.venv\` directory exists, so every document uses `.\venv\Scripts\python.exe` for that interpreter |
 | Python | `3.10.3`, 64-bit, AMD64 |
 | PyInstaller | `6.22.3` |
 | pyinstaller-hooks-contrib | `2026.10` |
@@ -81,6 +85,19 @@ reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"   # Display
 banner text and the uninstall registry entry `Inno Setup 7.1.1` are the
 authoritative version evidence.
 
+Re-checked read-only on 26 November 2026 for this reconciliation:
+`.\venv\Scripts\python.exe -m PyInstaller --version` → `6.22.3`; the virtual
+environment reports `3.10.3` (MSC v.1929, 64-bit); `reg query` reports
+`Inno Setup 7.1.1`; `C:\Program Files\Inno Setup 7\ISCC.exe` exists (2136992
+bytes). Every value in the table above is unchanged.
+
+`requirements.txt` lists only the runtime dependencies (`pywebview`, `numpy`,
+`onnxruntime`, `Pillow`); `pythonnet` and `clr_loader` arrive with `pywebview`.
+PyInstaller and `pyinstaller-hooks-contrib` are build tooling installed into the
+existing virtual environment and are deliberately not added to
+`requirements.txt`, because the application does not import them. A fresh clone
+therefore needs both installed before a build; `docs/BUILDING.md` states this.
+
 ### 2.2 Superseded Stage 1 snapshot
 
 The Stage 1 report stated that PyInstaller was absent from `venv` and that
@@ -104,17 +121,25 @@ exact command and the missing requirement are reported and the stage stops.
 
 ### 2.4 Repository state
 
-| Item | Verified value |
+| Item | Verified value (26 November 2026) |
 | --- | --- |
 | Branch | `main` |
-| HEAD | `eedcc00 feat: delegate result rendering to category views and add regression tests` |
-| Working tree | Modified: `.gitignore` (Stage 2, accepted but not committed). Untracked: `PACKAGING_PLAN.md`, `images/`, and the Stage 3 files listed in section 6 |
-| `dist/` and `build/` | Absent; no application bundle or installer has been produced |
-| `packaging/` | Absent before Stage 3 |
-| Backend tests | `Ran 13 tests — OK` at the start of Stage 3, before any Stage 3 change |
+| HEAD | `1c88f65 build: fix packaging checks and include dynamically loaded adapter` |
+| Earlier packaging commit | `2f9c70f build: add Windows packaging configuration and frozen-safe runtime paths` |
+| Committed packaging work | `.gitignore` (`build/`, `dist/`), `PACKAGING_PLAN.md`, `images/icon.png`, `backend/paths.py`, `backend/diagnostics.py`, the `backend/main.py` and `backend/adapters/numbers.py` changes, `tests/test_paths_and_diagnostics.py`, and `packaging/` (`launcher.py`, `recogniser.spec`, `prepare_build.py`, `build.ps1`, `version.txt`, `assets/recogniser.ico`) |
+| Uncommitted at the start of Stage 6 | Modified `packaging/build.ps1` (numeric version comparison and post-compile manifest re-check), untracked `packaging/recogniser.iss`, and a working-tree `PACKAGING_PLAN.md` that was an **older Stage 1 revision**, superseded by the committed copy |
+| Uncommitted before the Stage 5–6 commits | Modified `packaging/build.ps1`, `PACKAGING_PLAN.md` and `README.md`; untracked `packaging/recogniser.iss` and `docs/` |
+| `build/` and `dist/` | Present and ignored: `build\bundle-manifest.json` (239 files, created `2026-11-25T14:24:01Z`), `build\pyinstaller\`, `build\version_info.txt`, `dist\recogniser\` (239 files, 97.0 MB), `dist\installer\recogniser-1.0.0-setup.exe` (28.1 MB) with its `.sha256` |
+| Backend tests | `Ran 36 tests in 0.043s — OK` (26 November 2026) |
+| `models/0-numbers/__pycache__/model_0_numbers.cpython-310.pyc` | Present in the working tree, already ignored by `*.py[cod]`, and not in the bundle (no `__pycache__` anywhere under `_internal\models\`) |
 
-`models/0-numbers/__pycache__/model_0_numbers.cpython-310.pyc` exists in the
-working tree and is already ignored by `*.py[cod]`. It must not be bundled.
+The uncommitted plan revision was preserved byte-for-byte at
+`.tmp\stage6\PACKAGING_PLAN.worktree.md` before this document was reconciled, and
+the committed revision at `.tmp\stage6\PACKAGING_PLAN.HEAD.md`. Comparing the two
+showed the working-tree copy contained nothing that the committed copy lacks: it
+predates the Stage 3 corrections, the bundle/installer contract, and the
+diagnostics design. Reconciliation therefore starts from the committed revision
+and adds what Stages 4–6 actually produced.
 
 ## 3. Required resource inventory
 
@@ -141,8 +166,24 @@ hooks (see section 4.6), not from hand-maintained lists:
 | `onnxruntime` | `onnxruntime/capi/` with `onnxruntime.dll`, `onnxruntime_providers_shared.dll`, `onnxruntime_pybind11_state.pyd` |
 | `Pillow` | Image plugins via PyInstaller's `hook-PIL.Image.py` |
 
-Every path in the second table is an **expectation** until the first build in
-Stage 4 confirms it.
+Every row in the second table was confirmed in the accepted bundle, so the
+expectations are now observations. Verified on 26 November 2026 against
+`dist\recogniser` (239 files, 97.0 MB):
+
+| Path under `dist\recogniser\_internal` | Result |
+| --- | --- |
+| `frontend\index.html`, `frontend\js\bridge.js` | present |
+| `models\0-numbers\model_0_numbers.py`, `model_0_numbers.onnx` | present, side by side, no `__pycache__` anywhere under `models\` |
+| `webview\lib`, `webview\js` | present |
+| `pythonnet\runtime\Python.Runtime.dll` | present |
+| `clr_loader\ffi\dlls\amd64` | present |
+| `onnxruntime\capi\onnxruntime.dll` | present |
+| `tkinter` | absent (excluded in the spec) |
+
+Only `recogniser.exe` and `_internal\` sit at the bundle root. Application code
+is packed into the PyInstaller archive inside the executable, so no `backend\`
+directory appears in the bundle; the frontend and model files are the only
+readable resources that must stay as real files.
 
 ## 4. Packaging design
 
@@ -269,6 +310,7 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=[
+        "backend.adapters.numbers",
         "onnxruntime",
         "webview.platforms.winforms",
         "webview.platforms.edgechromium",
@@ -297,6 +339,13 @@ Rationale for each non-obvious choice:
 - **Explicit model files, not the directory**: a directory tree would also
   capture `__pycache__`. Two explicit entries keep the bundle minimal and
   verifiable.
+- **`backend.adapters.numbers`**: adapters are named in
+  `backend/model_registry.py` (`adapter="backend.adapters.numbers"`) and loaded
+  by `backend/api.py` with `importlib.import_module(model.adapter)`, which static
+  analysis cannot follow. Without this entry the frozen application raises
+  `ModuleNotFoundError` when it loads the model; it was added in `1c88f65` after
+  the first bundle exposed the omission, and the bundle was rebuilt and
+  re-reviewed.
 - **`hiddenimports`**: `webview.guilib` selects platform modules dynamically, so
   static analysis cannot see `webview.platforms.winforms` / `edgechromium`.
   `onnxruntime` is imported by the model script, which ships as a data file and
@@ -327,8 +376,9 @@ Rationale for each non-obvious choice:
 is justified here before it is created: the self-test has to be importable and
 testable without importing `webview`, which imports pythonnet and .NET. Putting
 it in `backend/main.py` would make the GUI layer a test dependency, and
-`backend/paths.py` would then hold unrelated concerns. No other production
-module changes are planned.
+`backend/paths.py` would then hold unrelated concerns. This is the final set:
+`backend/api.py`, `backend/model_registry.py`, the frontend, and
+`models/0-numbers/*` are unchanged by packaging.
 
 ### 4.6 Hook and collection status (verified against the installed versions)
 
@@ -341,10 +391,12 @@ module changes are planned.
 | `hook-onnxruntime.py` | Provided by hooks-contrib 2026.10 | `onnxruntime/capi` DLL/PYD bundled automatically |
 | `hook-PIL.Image.py` | Built-in hook collects image plugin submodules | PNG/JPEG plugins available |
 
-Consequence: **no custom hooks and no hand-written `binaries` entries** in the
-first build. If Stage 4's inventory shows a genuinely missing file, the fix is a
-targeted `hiddenimports`/`binaries` entry justified by the observed error, not a
-speculative hook.
+Consequence, confirmed by the accepted bundle: **no custom hooks and no
+hand-written `binaries` entries**. Every native file listed in section 3 arrived
+through those package and contrib hooks. The only analysis entry added after the
+first build was the `backend.adapters.numbers` hidden import (section 4.4); it is
+a dynamically imported pure-Python module, not a hook or a binary entry, and it
+was required for the frozen model load to work at all.
 
 ### 4.7 Runtime prerequisites
 
@@ -355,8 +407,9 @@ speculative hook.
 - **.NET Framework 4.8** is required by pythonnet/WinForms. It ships with
   supported Windows 10/11 releases.
 
-Application-level startup check (new, provisional): before creating the window,
-`backend/main.py` initialises pywebview's GUI layer and reads its renderer:
+Application-level startup check (implemented and accepted): before creating the
+window, `backend/main.py` initialises pywebview's GUI layer and reads its
+renderer:
 
 ```python
 from webview.guilib import initialize
@@ -368,8 +421,10 @@ The detected renderer is written to the log. If it is not `edgechromium`, the
 application shows a message box naming the missing WebView2 Runtime, its
 download URL, and the detected renderer, then exits with a non-zero code instead
 of silently falling back to the deprecated MSHTML engine. This is a small
-behaviour change for machines without WebView2 and is **provisional pending user
-confirmation**; the alternative is to warn and continue in MSHTML.
+behaviour change for machines without WebView2. The guard was accepted in Stage 3,
+so warn-and-continue in MSHTML is no longer an option: an affected machine sees
+`recogniser cannot start` with the download URL and a non-zero exit code, and
+nothing else in the application is reachable.
 
 Verified against the installed pywebview 6.2.1 sources: `initialize()` returns the
 platform module, `winforms.renderer` is assigned at import time from
@@ -401,8 +456,8 @@ Packaging rule:
 ### 4.9 Diagnostics
 
 `backend/api.py` and the adapters already log through module loggers, but no
-handler is configured, so a windowed frozen build would discard those records.
-Stage 3 adds the minimum needed to see failures:
+handler was configured, so a windowed frozen build would discard those records.
+Stage 3 added the minimum needed to see failures:
 
 | Item | Behaviour |
 | --- | --- |
@@ -456,14 +511,20 @@ resources:
 
 ### 4.11 Version
 
-- Single source: `packaging/version.txt` containing `1.0.0` (provisional; the
-  user may override before the first release).
+- Single source: `packaging/version.txt` containing `1.0.0`, the accepted
+  first-release version; change it there and rebuild to publish a new version.
 - The build script expands it into `build/version_info.txt` (four-part
   `1.0.0.0`) for `EXE(version=...)`, and passes `1.0.0` / `1.0.0.0` to ISCC as
   `AppVersion` / `AppVersion4`.
 - Before compiling the installer, the build script compares the built
-  executable's file version with `packaging/version.txt`, so the app and the
-  installer cannot drift.
+  executable's **numeric** PE version fields (`FileMajorPart` to `FilePrivatePart`)
+  with `packaging\version.txt`, so the app and the installer cannot drift. The
+  first version of that check compared the display string, which reads `1.0.0`
+  for a correct `1.0.0.0` resource and would have rejected a valid executable;
+  the numeric comparison replaced it before the installer was accepted.
+- After ISCC returns, the script re-checks `dist\recogniser` against the manifest.
+  A compile that changed a bundled file is reported as unreviewed rather than
+  distributed, because the setup would no longer wrap the accepted bytes.
 - Publisher, company, and copyright fields stay empty/neutral until the user
   supplies them.
 
@@ -479,6 +540,27 @@ resources:
   per-user install requiring no elevation. All-users installs are deferred (they
   would need `PrivilegesRequiredOverridesAllowed` and a second uninstall path).
 
+### 4.13 Installer (implemented)
+
+`packaging\recogniser.iss`, compiled **only** by `packaging\build.ps1 -Installer`:
+
+| Item | Value |
+| --- | --- |
+| `AppId` | `{76658801-C6D0-4BEF-BCF2-2093DB21D42E}` — generated once and never changed; a new value makes Windows treat a release as a different product and leaves the old version installed beside it |
+| Display name | `recogniser 1.0.0` (`AppVerName`, also `UninstallDisplayName`) |
+| Install directory | `{autopf}\recogniser`, which resolves to `%LOCALAPPDATA%\Programs\recogniser` because `PrivilegesRequired=lowest` |
+| Shortcuts | Start menu `recogniser`; optional desktop shortcut (`desktopicon` task, unchecked by default) |
+| Uninstaller | `unins000.exe` in the install directory, listed in Settings → Apps as `recogniser 1.0.0` |
+| Writes outside the install directory | None at install time. There is no `[UninstallDelete]`, the application never writes into `{app}`, and nothing under `%LOCALAPPDATA%\recogniser` is removed on uninstall |
+| Prerequisites | Documented on the wizard's welcome page (`[Messages] WelcomeLabel2` names WebView2 and the VC++ 2015-2022 x64 redistributable) and reported by the application's own renderer guard; the installer runs no second detection pass |
+| Output | `dist\installer\recogniser-1.0.0-setup.exe` plus `recogniser-1.0.0-setup.exe.sha256` |
+| Compression | `lzma2/max`, solid |
+| Version metadata | Supplied by `build.ps1` as `/DAppVersion=1.0.0` and `/DAppVersion4=1.0.0.0`; the `.iss` file has no version of its own and refuses to compile without both defines |
+
+The setup file's own version resource is `1.0.0` (`ProductVersion 1.0.0.0`), which
+is how the compiled installer is matched to `packaging\version.txt` after the
+fact.
+
 ## 5. Output locations and Git hygiene
 
 | Path | Content | Tracked? |
@@ -487,25 +569,30 @@ resources:
 | `build/bundle-manifest.json` | Reviewed-bundle manifest: every file in `dist/recogniser` with its SHA-256, stored **outside** that directory | Ignored (Stage 2) |
 | `dist/recogniser/` | Frozen onedir bundle | Ignored (Stage 2) |
 | `dist/installer/` | Compiled setup executable and checksum file | Ignored (Stage 2) |
-| `packaging/` | `launcher.py`, `recogniser.spec`, `build.ps1`, `prepare_build.py`, `version.txt`, `assets/recogniser.ico`, and (Stage 5) `recogniser.iss` | Tracked |
-| `images/icon.png` | Icon source | Tracked (currently untracked) |
-| `.tmp/` | Scratch directory used by build scripts (TEMP/TMP redirection) | Ignored (existing rule) |
+| `packaging/` | `launcher.py`, `recogniser.spec`, `build.ps1`, `prepare_build.py`, `version.txt`, `recogniser.iss`, `assets/recogniser.ico` | Tracked (`recogniser.iss` not yet committed) |
+| `images/icon.png` | Icon source, never modified by the build | Tracked |
+| `docs/` | `BUILDING.md` and `INSTALL.md` (Stage 6) | Tracked |
+| `.tmp/` | Scratch space for the build scripts: `TEMP`/`TMP`, `PYTHONPYCACHEPREFIX`, `PYINSTALLER_CONFIG_DIR`, the logs `build-tests.log`, `prepare-build.log`, `pyinstaller.log`, `iscc.log`, and the self-test data directories `selftest-project`, `selftest-cwd-data`, `selftest-cwd` | Ignored (existing rule) |
 
-- Stage 2 adds exactly two ignore entries, `build/` and `dist/`, so that build
-  outputs are excluded before any build exists.
-- No broad `*.exe`, `*.dll`, `*.spec`, `*.iss`, or `*.ico` patterns are added;
+- Stage 2 added exactly two ignore entries, `build/` and `dist/`, before any
+  build output existed. `git check-ignore -v` confirms that `build\probe`,
+  `dist\probe`, and `dist\installer\probe` match those rules, while
+  `packaging\recogniser.spec`, `packaging\recogniser.iss`, and `images\icon.png`
+  print nothing.
+- No broad `*.exe`, `*.dll`, `*.spec`, `*.iss`, or `*.ico` patterns were added;
   those would silently hide deliverables or the icon source.
-- Existing untracked items (`images/`, this document) are left untouched.
+- `images/icon.png` and `PACKAGING_PLAN.md` are tracked as normal project files.
 - `AGENTS.md` rule 3 applies: a stage's approval is not commit approval, and no
   commit or push happens unless the user explicitly asks for it.
 
 ## 6. Stage plan
 
-Each stage below ends with a report containing files changed, checks and actual
-results, manual inspection steps, limitations, and the proposed next stage, then
-**STOP for explicit approval**.
+Each stage below was reported with files changed, checks and actual results,
+manual inspection steps, limitations, and the proposed next stage, then stopped
+for explicit approval. Stages 1–5 are accepted and their outcomes are recorded in
+place; Stage 6 is the current revision and awaits acceptance.
 
-### Stage 1 — Inspect and plan (this document)
+### Stage 1 — Inspect and plan (accepted)
 
 Deliverable: a packaging plan that matches the installed tooling, the actual
 project layout, and the agreed stage order.
@@ -525,21 +612,23 @@ Checks performed for this revision:
 | Hook precedence | package hooks (`0`) outrank contrib (`-1000`) |
 | PyInstaller `SPECPATH` available inside spec files | `PyInstaller/building/build_main.py` injects it |
 | Icon source | `images\icon.png` exists; earlier `image/icon.png` path was wrong |
-| `git status`, `git log -1`, branch | untracked `PACKAGING_PLAN.md` and `images/`; `main` at `eedcc00` |
-| `.gitignore` contents | no `build/` or `dist/` rules yet |
+| `git status`, `git log -1`, branch | at the time: untracked `PACKAGING_PLAN.md` and `images/`; `main` at `eedcc00` |
+| `.gitignore` contents | at the time: no `build/` or `dist/` rules yet; Stage 2 added them at lines 21–22 |
 
-Checks not performed: no build, no installer compilation, no test run in this
-revision (document-only change).
+Checks not performed in that revision: no build, no installer compilation, and no
+test run, because it was a document-only change. Those checks belong to Stages 3–5
+and were run there.
 
 Manual inspection: read this document and confirm the stage split, the icon
-source path, and the provisional decisions in section 9.
+source path, and the decisions recorded in section 9.
 
-Limitations: everything about the produced bundle is still an expectation; the
-hook inventory and native library paths are unverified until Stage 4.
+Limitations at the time: everything about the produced bundle was an expectation;
+the hook inventory and native library paths were unverified until Stage 4.
+Section 3 now records the confirmed inventory.
 
-Next: Stage 2 — `.gitignore` only. **STOP for explicit approval.**
+Next: Stage 2 — `.gitignore` only. **Approved and completed.**
 
-### Stage 2 — Ignore build outputs (`.gitignore` only)
+### Stage 2 — Ignore build outputs (`.gitignore` only, accepted)
 
 Deliverable: `build/` and `dist/` are ignored before anything is generated, so no
 build artifact can be staged accidentally in later stages.
@@ -554,18 +643,18 @@ git check-ignore -v packaging\recogniser.spec images\icon.png      # must print 
 git status --short                                                # only .gitignore modified
 ```
 
-Expected actual results: the three probes report `build/` and `dist/` rules; the
-deliverable probes report nothing; `git status` shows ` M .gitignore` plus the
-pre-existing untracked `PACKAGING_PLAN.md` and `images/`.
+Actual results: the three probes report `.gitignore:21:build/` and
+`.gitignore:22:dist/`; the deliverable probes print nothing. Both entries were
+committed in `2f9c70f`.
 
 Manual inspection: confirm the diff contains only `build/` and `dist/`.
 
 Limitations: none functional.
 
 Next: Stage 3 — icons, spec, entry module, build script, minimal source changes.
-**STOP for explicit approval.**
+**Approved and completed.**
 
-### Stage 3 — Packaging assets and build inputs
+### Stage 3 — Packaging assets and build inputs (accepted)
 
 Deliverable: all packaging inputs exist and are reviewable without producing a
 bundle.
@@ -576,7 +665,7 @@ Files created:
 | --- | --- |
 | `packaging/launcher.py` | Frozen entry point; imports and calls `backend.main.main` |
 | `packaging/recogniser.spec` | PyInstaller onedir configuration (section 4.4) |
-| `packaging/version.txt` | Provisional `1.0.0` version source |
+| `packaging/version.txt` | `1.0.0` version source, accepted for the first release |
 | `packaging/prepare_build.py` | Validates the version, writes `build/version_info.txt`, generates the ICO when missing or stale |
 | `packaging/build.ps1` | Tests, PyInstaller run, bundle inventory, manifest, self-test, optional ISCC |
 | `packaging/assets/recogniser.ico` | Multi-resolution icon derived from `images/icon.png` |
@@ -639,10 +728,21 @@ Limitations: nothing is built yet, so no claim is made about bundle contents.
 The renderer guard, the moved writable data directory, and `--self-test` are new
 behaviour and need explicit user acceptance.
 
-Next: Stage 4 — build and verify the onedir bundle. **STOP for explicit
-approval.**
+Outcome (accepted): every file above exists and was committed in `2f9c70f`. The
+checks in that stage ran as written, and the artefacts they left in `.tmp\` and
+`build\` are still present:
 
-### Stage 4 — Build and verify the onedir bundle
+| Check | Actual result |
+| --- | --- |
+| `python -m unittest discover -s tests -v` | 36 tests, `OK`; re-run in Stage 6 as `Ran 36 tests in 0.036s` |
+| `python packaging\prepare_build.py` | `Version: 1.0.0 (file version 1.0.0.0)`, `Icon entries: [16, 24, 32, 48, 64, 128, 256]` (`.tmp\prepare-build.log`) |
+| `import packaging` | resolves into `venv\Lib\site-packages\packaging`, so the new `packaging\` directory does not shadow it; `build.ps1` re-checks this on every build |
+| Source-mode `--self-test` | exit code 0 with an absolute `RECOGNISER_DATA_DIR` under `.tmp\` |
+| Renderer guard | accepted; a non-`edgechromium` renderer shows `recogniser cannot start` and exits 1 |
+
+Next: Stage 4 — build and verify the onedir bundle. **Approved and completed.**
+
+### Stage 4 — Build and verify the onedir bundle (accepted)
 
 Deliverable: `dist\recogniser\recogniser.exe` runs the application with bundled
 frontend and model, independent of the working directory.
@@ -653,7 +753,8 @@ Commands:
 .\packaging\build.ps1 -Clean
 ```
 
-Checks (all automated, reported with actual output):
+Checks specified for this stage (actual results are recorded in the outcome block
+below):
 
 | Check | Expected result |
 | --- | --- |
@@ -674,6 +775,21 @@ bundle, a hand-edited config, a stray log — the manifest no longer matches and
 the installer step fails until the bundle is rebuilt, reverified, and reviewed
 again.
 
+Outcome (accepted): the bundle was built, the tests in section 6 ran inside
+`build.ps1`, and the user reviewed the bundle. The first build omitted the
+dynamically loaded adapter, so `1c88f65` added `backend.adapters.numbers` to
+`hiddenimports` and the bundle was rebuilt and re-reviewed. Evidence from the
+accepted run, re-checked on 26 November 2026:
+
+| Check | Actual result |
+| --- | --- |
+| Bundle inventory | 239 files, 97.0 MB. `frontend\index.html`, `css\style.css`, `css\themes.css`, `js\bridge.js`, `js\main.js`, `js\settings.js`, `categories\numbers.js`, both `model_0_numbers` files, `webview\lib`, `webview\js`, `pythonnet\runtime\Python.Runtime.dll`, `clr_loader\ffi\dlls\amd64`, and `onnxruntime\capi\onnxruntime.dll` are present; `tkinter` is absent and there is no `__pycache__` under `models\` |
+| Frozen `--self-test` from the project root | exit code 0; report `frozen=True`, `renderer='edgechromium'`, `passed=True`, recognition status `ok` (`.tmp\selftest-project\logs\self-test.json`) |
+| Frozen `--self-test` from `.tmp\selftest-cwd` | exit code 0 with the same report values (`.tmp\selftest-cwd-data\logs\self-test.json`), which is what proves working-directory independence |
+| Bundle manifest | `build\bundle-manifest.json` lists 239 files with a relative path and SHA-256 each, created `2026-11-25T14:24:01Z`; recomputing every hash now reports 0 added, missing, or modified files |
+| Working tree | `git status --short` lists no `build\` or `dist\` content |
+| User review | the bundle launched from Explorer, showed the styled window with no error dialog, recognised an uploaded image and a drawing, and the executable, title-bar, and taskbar icons were accepted |
+
 Manual inspection:
 
 1. Launch `dist\recogniser\recogniser.exe` from Explorer.
@@ -683,13 +799,13 @@ Manual inspection:
 4. Confirm the executable file icon, the title-bar icon, and the taskbar icon.
 5. Switch themes and toggle the settings that exist today.
 
-Limitations: only this Windows 11 x64 machine is tested. Native library paths
-are confirmed only to the extent the self-test and manual run exercise them.
+Limitations: only this Windows 11 x64 machine is tested. Native library paths are
+confirmed only to the extent the self-test and manual run exercise them.
 Clean-machine behaviour, ARM64, and machines without WebView2 remain untested.
 
-Next: Stage 5 — Inno Setup installer. **STOP for explicit approval.**
+Next: Stage 5 — Inno Setup installer. **Approved and completed.**
 
-### Stage 5 — Inno Setup installer
+### Stage 5 — Inno Setup installer (accepted)
 
 Deliverable: `dist\installer\recogniser-1.0.0-setup.exe` compiled from
 `packaging\recogniser.iss`.
@@ -704,17 +820,21 @@ Script shape:
 #endif
 
 [Setup]
-AppId={{<GUID generated once in this stage>}}
+AppId={{76658801-C6D0-4BEF-BCF2-2093DB21D42E}
 AppName=recogniser
 AppVersion={#AppVersion}
 AppVerName=recogniser {#AppVersion}
+UninstallDisplayName=recogniser {#AppVersion}
 DefaultDirName={autopf}\recogniser
 DisableProgramGroupPage=yes
+DisableWelcomePage=no
 SetupIconFile=assets\recogniser.ico
 UninstallDisplayIcon={app}\recogniser.exe
 VersionInfoVersion={#AppVersion4}
 VersionInfoProductVersion={#AppVersion4}
 VersionInfoTextVersion={#AppVersion}
+VersionInfoProductName=recogniser
+VersionInfoDescription=recogniser Setup
 SetupArchitecture=x64
 ArchitecturesAllowed=x64compatible and not arm64
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -749,8 +869,9 @@ Filename: "{app}\recogniser.exe"; Description: "Launch recogniser"; Flags: nowai
   a missing manifest aborts too, because there would be nothing proving which
   bundle was reviewed. `-Installer` never invokes PyInstaller, so it cannot
   silently replace the reviewed bundle with a new build.
-- `AppId` GUID is generated once with `[guid]::NewGuid()` during this stage, then
-  recorded in the document and reused for every future version.
+- The `AppId` GUID `{76658801-C6D0-4BEF-BCF2-2093DB21D42E}` was generated once
+  with `[guid]::NewGuid()` during this stage and is now fixed in section 4.13 and
+  in `packaging\recogniser.iss`. Every future version reuses it.
 - No `[UninstallDelete]`, no `{app}` writes, no `{localappdata}` deletion.
 - No `[Code]` prerequisite detection. The app's own startup guard reports a
   missing WebView2 with an actionable message; duplicating the detection in the
@@ -766,49 +887,95 @@ rebuilds the application):
 
 Checks:
 
-| Check | Expected result |
+| Check | Actual result |
 | --- | --- |
-| ISCC exit code | `0` |
-| Output file | `dist\installer\recogniser-1.0.0-setup.exe` exists, SHA-256 printed |
+| ISCC exit code | `0`; `.tmp\iscc.log` ends with `Successful compile (11.781 sec)` and names `dist\installer\recogniser-1.0.0-setup.exe` |
+| Output file | `dist\installer\recogniser-1.0.0-setup.exe` exists (28.1 MB) with SHA-256 `dddda0833dcaf96625648eb036de3fc1f4f540e4e655e18d77b35198a298715f` recorded in `recogniser-1.0.0-setup.exe.sha256` |
 | Setup architecture | PE `e_machine` of the setup executable is `0x8664` |
-| Version metadata | setup file version equals `packaging\version.txt` (`1.0.0`) |
-| Icon resource | `[System.Drawing.Icon]::ExtractAssociatedIcon()` returns a non-null icon |
-| Uninstall entry name | derived from `AppName`; no Python path or virtualenv referenced in the script |
-| Repo state | `dist\installer\` ignored; only packaging sources changed |
-| Bundle guard | Adding, deleting, or editing a file under `dist\recogniser` makes `-Installer` abort before ISCC runs and name the changed files; restoring the manifest match lets it proceed |
+| Version metadata | setup file version `1.0.0`, product version `1.0.0.0`, product name `recogniser` |
+| Icon resource | `[System.Drawing.Icon]::ExtractAssociatedIcon()` returns a non-null icon for both the setup file and `recogniser.exe` |
+| Uninstall entry name | `recogniser 1.0.0`, from `AppVerName` / `UninstallDisplayName`; the script contains no Python or virtual-environment path |
+| Repo state | at the time: `dist\installer\` ignored; `packaging\recogniser.iss` and the `build.ps1` corrections uncommitted. Both were committed later in `baa1c51` |
+| Bundle guard | not re-run in Stage 6, because breaking the bundle to test it would modify the reviewed bundle and `-Installer` would recompile the accepted setup. The guard's comparison is the same function the build path uses, and re-checking the accepted bundle today reported 0 differences |
 
-Manual inspection (performed by the user, because running the installer writes
-outside this project's boundary): install per-user, confirm the Start-menu
-shortcut icon and the install directory contents, launch from the shortcut,
-confirm `%LOCALAPPDATA%\recogniser` receives only the app's own data, then run
-the uninstaller and confirm the install directory and shortcuts are removed
-while user data is preserved.
+User verification record (performed by the user on 26 November 2026, accepted,
+because running the installer writes outside this project's boundary): the user
+ran `dist\installer\recogniser-1.0.0-setup.exe`, completed the installation, and
+confirmed that the installed application launched from the Start-menu shortcut and
+recognised both an uploaded image and a freehand drawing, and that the shortcut
+and application icons were acceptable. The installation completed as the per-user
+install the script requests.
+
+Not separately recorded in this document: the exact install directory contents,
+the state of `%LOCALAPPDATA%\recogniser` after the uninstall, and whether the
+uninstaller removed the install directory and shortcuts. The script has no
+`[UninstallDelete]` and nothing writes into `{app}`, which is why user data cannot
+be removed by the uninstaller, but this is a property of the script rather than an
+observation.
 
 Limitations: the agent does not install or uninstall the package, so install-time
-behaviour is verified by the user only. No clean-machine, ARM64, or
-no-WebView2 machine is tested.
+behaviour is verified by the user only. No clean-machine, ARM64, or no-WebView2
+machine is tested.
 
-Next: Stage 6 — installation verification and documentation. **STOP for explicit
-approval.**
+Next: Stage 6 — installation verification and documentation.
+**Approved and completed.**
 
-### Stage 6 — Installation verification and documentation
+### Stage 6 — Installation verification and documentation (this revision)
 
-Deliverable: installer and build process verified from the user's perspective and
-documented.
+Deliverable: the build and install process is documented so that someone else can
+reproduce the bundle and the installer, and the accepted user verification is
+recorded.
 
-Files: `docs/BUILDING.md` (prerequisites, one-command build, output locations,
-self-test, troubleshooting), `docs/INSTALL.md` (install, uninstall, where user
-data lives, WebView2/VC++ requirements), a short `README` note pointing at both.
+Files created or changed in this stage:
 
-Checks: documentation commands are executed exactly as written; the record of
-the user's install/uninstall run is captured verbatim; `git status` is clean
-apart from intended files.
+| File | Change |
+| --- | --- |
+| `docs/BUILDING.md` (new) | Prerequisites, including the note that the environment directory is `venv\` rather than `.venv\`, one-command bundle build, outputs and logs, frozen and source self-test, installer packaging and the manifest guard, version and icon changes, bundle contents (`hiddenimports`), troubleshooting |
+| `docs/INSTALL.md` (new) | Requirements (WebView2, VC++ redistributable), hash verification, install/unattended install, launch, data locations, upgrade, uninstall and what it leaves behind, troubleshooting, what is not included |
+| `README.md` | New “Build and install” section linking both documents; project layout lists `packaging/`, `docs/`, `build/`, `dist/`, and both test modules; adding a model now says to extend the spec's `datas` and `hiddenimports` for the packaged build; the limitation that there was no installer is replaced by an accurate installer limitation |
+| `PACKAGING_PLAN.md` | Stages 1–5 marked accepted with their actual results; this stage records the documentation and the user's install verification |
 
-Explicitly pending, not claimed: clean Windows 11 machine, Windows 10 1809,
-ARM64, machines without WebView2, code signing, SmartScreen reputation.
+Checks, run from the project root on 26 November 2026 exactly as the documents
+write them:
 
-Next: packaging complete; remaining work only on user request. **STOP for
-explicit approval.**
+| Check | Actual result |
+| --- | --- |
+| `.\venv\Scripts\python.exe -m unittest discover -s tests -v` | exit code 0, `Ran 36 tests in 0.036s`, `OK` (`.tmp\stage6-unittest.txt`) |
+| `.\venv\Scripts\python.exe packaging\prepare_build.py` (BUILDING.md, icon section) | exit code 0; `Version: 1.0.0 (file version 1.0.0.0)`, `Icon up to date`, `Icon entries: [16, 24, 32, 48, 64, 128, 256]` |
+| Source self-test (BUILDING.md): `RECOGNISER_DATA_DIR=.tmp\source-selftest`, `python -m backend.main --self-test` | exit code 0, report `frozen=False`, `passed=True` |
+| Frozen self-test (BUILDING.md): `RECOGNISER_DATA_DIR=.tmp\manual-selftest`, `Start-Process … --self-test -Wait` | exit code 0, report `frozen=True`, `renderer=edgechromium`, `passed=True`, recognition status `ok` |
+| Installer hash (INSTALL.md): `Get-FileHash … -Algorithm SHA256` | `dddda0833dcaf96625648eb036de3fc1f4f540e4e655e18d77b35198a298715f`, identical to `.sha256` |
+| Every path the documents reference | all present: `README.md`, `PACKAGING_PLAN.md`, `images\icon.png`, `docs\BUILDING.md`, `docs\INSTALL.md`, both packaging scripts, the spec, the `.iss`, `version.txt`, the ICO, and `dist\recogniser\recogniser.exe` |
+| Markdown links between the documents | `docs/BUILDING.md` ↔ `docs/INSTALL.md` ↔ `README.md` resolve to existing files; a scripted check of every relative `.md` link in `README.md`, `PACKAGING_PLAN.md`, and both `docs/` files reports all targets present |
+| Commands re-checked after the final document edits | `Ran 36 tests in 0.181s`, `OK` (`.tmp\stage6-unittest-recheck.txt`); the slower time comes from the check's own `PYTHONPYCACHEPREFIX`; the source and frozen self-tests were re-run after the edits with the same results |
+
+Checks not performed: `.\packaging\build.ps1`, `-Clean`, and `-Installer` were not
+re-run in this stage, because they would rebuild or recompile the accepted
+artefacts. Their behaviour was exercised in Stages 4 and 5, and today's
+`prepare_build.py` and self-test runs confirm the inputs they consume are intact.
+
+Manual verification steps for the user (visual and install acceptance is theirs):
+
+1. Read `docs/BUILDING.md` and `docs/INSTALL.md` and confirm the commands match
+   what you would run.
+2. Optionally re-run `.\packaging\build.ps1` and `.\packaging\build.ps1 -Installer`
+   to confirm the documents from a clean `dist\`.
+3. Confirm the uninstall behaviour described in `docs/INSTALL.md`: the
+   uninstaller removes the install directory and shortcuts but leaves
+   `%LOCALAPPDATA%\recogniser`.
+
+Known limitations and unresolved items:
+
+- Install behaviour is recorded from the user's acceptance and is not
+  reproducible by the agent, which does not write outside the project.
+- Not verified: a clean Windows 11 machine, Windows 10 1809, ARM64, machines
+  without WebView2, code signing, and SmartScreen reputation.
+- The installation-time details the user did not report (install directory
+  contents, data directory after uninstall) are marked as not separately
+  recorded rather than asserted.
+
+Next: packaging is complete. Remaining work proceeds only on user request.
+**STOP for explicit approval.**
 
 ## 7. Risks and mitigations
 
@@ -818,7 +985,7 @@ explicit approval.**
 | CWD-dependent resource bug | `resource_path()` plus self-test from two working directories |
 | Model loaded from the wrong location | Model files ship as real files beside their script; self-test asserts the ONNX path |
 | Missing WebView2 on a target machine | Documented prerequisite plus the startup renderer guard |
-| Deprecated MSHTML renderer used silently | Guard exits with an actionable message (provisional) |
+| Deprecated MSHTML renderer used silently | Guard exits with an actionable message; confirmed in Stage 4, and documented in `docs/INSTALL.md` |
 | Installer deleting user data on uninstall | No `[UninstallDelete]`; all writable data under `%LOCALAPPDATA%` |
 | Build artifacts entering Git | `build/` and `dist/` ignored before the first build (Stage 2) |
 | Writing outside the project during build | `TEMP`, `TMP`, `PYTHONPYCACHEPREFIX`, `PYINSTALLER_CONFIG_DIR` redirected to `.tmp\`; the only exception is the app's own `%LOCALAPPDATA%` data at runtime, which can be overridden with `RECOGNISER_DATA_DIR` |
@@ -836,17 +1003,17 @@ explicit approval.**
 
 ## 9. Decisions to confirm
 
-These are provisional and do not block Stage 2:
+All four decisions were confirmed during implementation and are now settled by the
+accepted stages:
 
 1. Renderer guard: exit with a message when the renderer is not `edgechromium`
-   (chosen) versus warn and continue in MSHTML.
-2. Version `1.0.0` from `packaging/version.txt` (chosen), pending a real value.
-3. Per-user install only for the first release (chosen).
-4. `images/icon.png`, `PACKAGING_PLAN.md`, and the future `docs/` files to be
-   tracked as normal project files (chosen).
-
-Nothing in this list prevents adding `build/` and `dist/` to `.gitignore`, which
-is the whole of Stage 2.
+   (chosen and implemented; MSHTML is refused rather than used).
+2. Version `1.0.0` from `packaging/version.txt` (chosen; still the current value,
+   change it there and rebuild).
+3. Per-user install only for the first release (chosen and implemented with
+   `PrivilegesRequired=lowest`).
+4. `images/icon.png`, `PACKAGING_PLAN.md`, and the `docs/` files to be tracked as
+   normal project files (chosen and done).
 
 ## 10. Stage approval and Git policy
 
@@ -854,16 +1021,23 @@ is the whole of Stage 2.
 - Approval of a stage is not authorisation to commit it.
 - No commits, amends, resets, branch changes, or pushes unless the user asks.
   When asked, only that stage's files are staged.
-- Proposed commit subjects (used only on request):
+- Actual commit history for this work. Stages were implemented one at a time, but
+  the user approved commits in two batches:
 
-| Stage | Proposed subject |
-| --- | --- |
-| 1 | `docs: rewrite packaging plan for onedir build and Inno Setup 7` |
-| 2 | `chore: ignore PyInstaller build and dist output` |
-| 3 | `build: add PyInstaller spec, entry point, icon and build script` |
-| 4 | `build: verify onedir bundle runs from any working directory` |
-| 5 | `build: add Inno Setup installer for per-user x64 install` |
-| 6 | `docs: document building and installing the packaged application` |
+| Commit | Subject | Covers |
+| --- | --- | --- |
+| `2f9c70f` | `build: add Windows packaging configuration and frozen-safe runtime paths` | Stages 1–3: this plan, `.gitignore`, `images/icon.png`, the frozen-safe backend changes, tests, and the `packaging/` assets and build script |
+| `1c88f65` | `build: fix packaging checks and include dynamically loaded adapter` | The Stage 4 correction that added `backend.adapters.numbers` to `hiddenimports` and tightened `build.ps1` |
+| `baa1c51` | `build: add Inno Setup installer for per-user x64 install` | Stage 5: `packaging/recogniser.iss` and the `build.ps1` installer corrections (numeric version comparison, post-compile manifest re-check) |
+
+- Committed after explicit instruction once Stages 5 and 6 were accepted:
+  `packaging/build.ps1` and `packaging/recogniser.iss` in `baa1c51`, then this
+  document, `README.md`, `docs/BUILDING.md`, and `docs/INSTALL.md` under the
+  subject `docs: document building and installing the packaged application`.
+- No generated output was committed: `build/`, `dist/`, and `.tmp/` stay ignored,
+  and no file outside those two sets was staged.
+- Nothing has been pushed, and the accepted bundle and installer were not rebuilt
+  or recompiled to make these commits.
 
 ## 11. Corrections applied to the earlier draft
 
@@ -922,3 +1096,24 @@ before any Stage 3 code was written. All of them are now reflected above.
    relative path and SHA-256 for every file in that directory, and the installer
    step rejects added, missing, or modified files until the bundle is rebuilt,
    reverified, and accepted. The installer command never invokes PyInstaller.
+
+## 12. Completion criteria and status
+
+| Criterion | Status |
+| --- | --- |
+| One command builds the bundle from a prepared checkout | Met; `.\packaging\build.ps1` (Stage 4) |
+| The frozen application runs from any working directory | Met; frozen self-test from two working directories (Stage 4) |
+| Model resources are real files and load in the frozen build | Met; the dynamically imported adapter was added to `hiddenimports` in `1c88f65` |
+| The test suite passes as part of the build | Met; 36 tests, `build.ps1` stops on failure (Stages 4 and 6) |
+| A reviewed bundle can be packaged but never silently altered | Met; `build\bundle-manifest.json` and the `-Installer` guard (Stage 5) |
+| The installer is per-user, x64, versioned, and carries the icon | Met; verified metadata and PE header (Stage 5) |
+| User data survives uninstall | Met by design: no `[UninstallDelete]`, all writable data outside `{app}`. The user confirmed the install and run; the post-uninstall data state was not separately recorded |
+| Build and install processes are documented | Met; `docs/BUILDING.md` and `docs/INSTALL.md`, with their commands re-run as written (Stage 6) |
+| No build artefact enters Git | Met; `build/` and `dist/` ignored before the first build (Stage 2) |
+| Clean Windows 11 machine, Windows 10 1809, ARM64, no-WebView2 machine | Not tested; recorded as limitations, not claimed |
+| Code signing and SmartScreen reputation | Not done; deferred by section 8 |
+
+Packaging is complete within this scope. Anything beyond this list — signing,
+publishing, portable builds, additional models, or Windows 10 verification —
+needs a new decision from the user.
+

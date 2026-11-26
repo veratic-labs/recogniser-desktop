@@ -64,6 +64,24 @@ use no GUI, network access, or real inference. Adapter modules are imported only
 to inspect function names; mocked modules exercise the API error paths, and all
 patched state is restored automatically.
 
+## Build and install
+
+The Windows executable bundle and the Inno Setup installer are produced with one
+command each:
+
+```powershell
+.\packaging\build.ps1            # tests, bundle, frozen self-tests, manifest
+.\packaging\build.ps1 -Installer # package the verified bundle as a setup file
+```
+
+- [docs/BUILDING.md](docs/BUILDING.md) covers prerequisites, outputs, the
+  reviewed-bundle manifest, version and icon changes, and troubleshooting.
+- [docs/INSTALL.md](docs/INSTALL.md) covers installing, upgrading, uninstalling,
+  prerequisites, and where user data lives.
+
+Building needs Inno Setup 7 only for the installer step. Installing a finished
+build needs neither Python nor the repository.
+
 ## Current behaviour
 
 - The welcome screen shows a **Select a category** list of registered
@@ -146,17 +164,31 @@ models/
   0-numbers/
     model_0_numbers.onnx
     model_0_numbers.py
+packaging/
+  build.ps1            One-command build, verification, and installer packaging
+  launcher.py          Frozen entry point used by PyInstaller
+  prepare_build.py     Generates version_info.txt and the multi-size ICO
+  recogniser.spec      PyInstaller specification
+  recogniser.iss       Inno Setup script
+  version.txt          Single source of the application version
+  assets/              Generated installer and executable icon
 tests/
   __init__.py
   test_registry_and_api.py  Registry, API validation, and error-mapping checks
+  test_paths_and_diagnostics.py  Data paths, logging, and the self-test report
+docs/
+  BUILDING.md          Build and packaging instructions
+  INSTALL.md           Install, upgrade, and uninstall instructions
 AGENTS.md              Agent workflow policy
 PLAN.md                Product requirements, architecture, and milestones
+PACKAGING_PLAN.md      Packaging plan, completed stages, and their evidence
 README.md              Installation, usage, contracts, and extension guide
 requirements.txt       Python runtime dependencies
 ```
 
-`venv/`, `.webview-data/`, `.tmp/`, Python caches, and other generated files are
-ignored by Git. Model resources are intentional repository content.
+`venv/`, `.webview-data/`, `.tmp/`, `build/`, `dist/`, Python caches, and other
+generated files are ignored by Git. Model resources are intentional repository
+content.
 
 ## Adding a model to an existing category
 
@@ -190,7 +222,11 @@ ignored by Git. Model resources are intentional repository content.
    If it returns a different result shape, update that category's result
    renderer or add a category whose view can display it. Do not force an integer
    prediction or confidence score into the shared result contract.
-5. Run `python -m unittest discover -s tests -v`. The registry checks reject
+5. If you package the application, add the new model's `.py` and `.onnx` files to
+   `datas` and the adapter module to `hiddenimports` in `packaging/recogniser.spec`.
+   The frozen bundle does not discover model files on its own; see
+   [docs/BUILDING.md](docs/BUILDING.md).
+6. Run `python -m unittest discover -s tests -v`. The registry checks reject
    duplicate IDs and invalid model-to-category relationships, and verify that
    every registered model adapter exposes each mode's required function.
 
@@ -394,9 +430,14 @@ second real model demonstrates the need.
 - The current upload path accepts PNG and JPEG files up to 20 MB. These are
   properties of the Numbers adapter, not guarantees for future categories.
 - Theme preference is held in memory only and is not persisted across launches.
-- The automated suite under `tests/` covers backend registry, API, and adapter
-  error handling only. There is no committed frontend DOM test runner, installer,
-  training workflow, recognition history, multi-digit detection, or general OCR.
+- The automated suite under `tests/` covers the backend registry, API, adapter
+  error paths, filesystem helpers, and the self-test report only. There is no
+  committed frontend DOM test runner, training workflow, recognition history,
+  multi-digit detection, or general OCR.
+- A Windows x64 bundle and installer are produced by `packaging\build.ps1`; see
+  [docs/BUILDING.md](docs/BUILDING.md) and
+  [docs/INSTALL.md](docs/INSTALL.md). The installer is unsigned and has no
+  automatic updates, and only one Windows 11 x64 machine has been tested.
 - A non-digit image is not guaranteed to produce low confidence. Threshold
   verification uses controlled scores rather than relying on an arbitrary image.
 - Automated milestone regression verification and manual interface acceptance
